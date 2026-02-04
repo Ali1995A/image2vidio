@@ -50,6 +50,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [status, setStatus] = useState<string>("");
+  const runIdRef = useRef(0);
 
   const urlRef = useRef<string | null>(null);
 
@@ -82,6 +83,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
   }, []);
 
   const onGenerate = async () => {
+    const runId = ++runIdRef.current;
     setError(null);
     setStatus("");
     setVideoBlob(null);
@@ -95,6 +97,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
       setStatus(`${py("shēng chéng zhōng")}…（生成中…）`);
       const pngBlob = await doodleRef.current.exportPngBlob();
       const pngDataUrl = await blobToDataUrl(pngBlob);
+
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -106,6 +109,61 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
           imageDataUrl: pngDataUrl,
         }),
       });
+
+      const tryHandlePending = async (pendingTid: string) => {
+        const maxWaitMs = 90_000;
+        const started = Date.now();
+        while (Date.now() - started < maxWaitMs) {
+          if (runIdRef.current !== runId) return; // superseded
+          setStatus(`${py("shēng chéng zhōng")}…（生成中… ${Math.round((Date.now() - started) / 1000)}s）`);
+          await new Promise((r) => setTimeout(r, 1800));
+
+          const poll = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              action: "content",
+              tid: pendingTid,
+              apiKey,
+              baseUrl,
+            }),
+          });
+
+          if (poll.status === 202) continue;
+          if (!poll.ok) {
+            const t = await poll.text();
+            throw new Error(t || `HTTP ${poll.status}`);
+          }
+
+          const blob = await poll.blob();
+          const sniffed = await sniffBlobVideoType(blob);
+          if (!sniffed) {
+            const snippet = await blob.slice(0, 400).text().catch(() => "");
+            throw new Error(
+              snippet
+                ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
+                : "fǎnhuí bùshì shìpín（返回不是视频）",
+            );
+          }
+
+          const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
+          if (runIdRef.current !== runId) return;
+          setVideoBlob(video);
+          setStatus(`${py("wán chéng")}!（完成!）`);
+          return;
+        }
+        throw new Error("shíjiān chāoshí（时间超时）");
+      };
+
+      if (res.status === 202) {
+        const json = (await res.json().catch(() => null)) as any;
+        const tid = typeof json?.tid === "string" ? json.tid : "";
+        if (tid) {
+          await tryHandlePending(tid);
+          return;
+        }
+      }
+
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || `HTTP ${res.status}`);
@@ -114,6 +172,16 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
       const ct = (res.headers.get("content-type") || "").toLowerCase();
       if (ct.includes("application/json")) {
         const text = await res.text();
+        // If server returns pending json but with 200, handle it (defensive).
+        try {
+          const j = JSON.parse(text) as any;
+          const tid = typeof j?.tid === "string" ? j.tid : "";
+          const pending = Boolean(j?.pending) || /still being generated/i.test(String(j?.error?.message || j?.message || ""));
+          if (pending && tid) {
+            await tryHandlePending(tid);
+            return;
+          }
+        } catch {}
         throw new Error(text || "fǎnhuí bùshì shìpín（返回不是视频）");
       }
 

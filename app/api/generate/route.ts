@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type PendingResult = { pending: true; tid: string; message?: string };
+
 function sniffVideoContentType(contentType: string, buf: ArrayBuffer): string | null {
   const ct = (contentType || "").split(";")[0]?.trim().toLowerCase();
   if (ct.startsWith("video/")) return ct;
@@ -32,6 +34,23 @@ function arrayBufferToTextSnippet(buf: ArrayBuffer, maxChars: number) {
   } catch {
     return "";
   }
+}
+
+function parsePendingTidFromText(text: string): PendingResult | null {
+  const s = String(text || "");
+  // Example: "video is still being generated (tid: 2026...)"
+  const m = /tid:\s*([0-9]+)/i.exec(s);
+  if (!m) return null;
+  return { pending: true, tid: m[1], message: s.slice(0, 200) };
+}
+
+function parsePendingTidFromJson(json: unknown): PendingResult | null {
+  if (!json || typeof json !== "object") return null;
+  const anyJson = json as Record<string, any>;
+  const msg =
+    anyJson?.error?.message ?? anyJson?.message ?? anyJson?.error ?? anyJson?.detail;
+  if (typeof msg !== "string") return null;
+  return parsePendingTidFromText(msg);
 }
 
 function pickId(json: unknown): string | null {
@@ -73,6 +92,17 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return new Blob([bytes], { type: mime });
 }
 
+async function fetchVideoContent(params: {
+  baseUrl: string;
+  apiKey: string;
+  tid: string;
+}): Promise<Response> {
+  const { baseUrl, apiKey, tid } = params;
+  return await fetch(`${baseUrl}/videos/${encodeURIComponent(tid)}/content`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -85,12 +115,48 @@ export async function POST(req: Request) {
     const seconds = Number(body?.seconds || 2);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
+    const action = String(body?.action || "").trim().toLowerCase();
+    const tid = String(body?.tid || "").trim();
 
     if (!apiKey)
       return new NextResponse(
         "Missing apiKey. Set AIHUBMIX_API_KEY in Vercel env (or pass apiKey from client).",
         { status: 400 },
       );
+
+    if (action === "content") {
+      if (!tid) return new NextResponse("Missing tid", { status: 400 });
+
+      const contentRes = await fetchVideoContent({ baseUrl, apiKey, tid });
+      const ct = contentRes.headers.get("content-type") || "";
+      if (!contentRes.ok) {
+        const text = await contentRes.text();
+        const pending = parsePendingTidFromText(text);
+        if (pending) return NextResponse.json(pending, { status: 202 });
+        return new NextResponse(text || `Content fetch failed (${contentRes.status})`, { status: 502 });
+      }
+      const ab = await contentRes.arrayBuffer();
+      const sniffed = sniffVideoContentType(ct, ab);
+      if (!sniffed) {
+        const snippet = arrayBufferToTextSnippet(ab, 800);
+        return NextResponse.json(
+          {
+            error: "Content response is not a known video container",
+            contentType: ct,
+            snippet: snippet || undefined,
+          },
+          { status: 502 },
+        );
+      }
+      return new NextResponse(ab, {
+        status: 200,
+        headers: {
+          "content-type": sniffed,
+          "cache-control": "no-store",
+        },
+      });
+    }
+
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
@@ -113,8 +179,19 @@ export async function POST(req: Request) {
 
     const genContentType = genRes.headers.get("content-type") || "";
     if (!genRes.ok) {
-      const t = await genRes.text();
-      return new NextResponse(t || `Upstream error (${genRes.status})`, { status: 502 });
+      const text = await genRes.text();
+      const maybeJson = (() => {
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return null;
+        }
+      })();
+
+      const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+      if (pending) return NextResponse.json(pending, { status: 202 });
+
+      return new NextResponse(text || `Upstream error (${genRes.status})`, { status: 502 });
     }
 
     const isProbablyBinary =
@@ -148,6 +225,8 @@ export async function POST(req: Request) {
     }
 
     const genJson = await genRes.json().catch(async () => ({ raw: await genRes.text() }));
+    const pendingFromOkJson = parsePendingTidFromJson(genJson);
+    if (pendingFromOkJson) return NextResponse.json(pendingFromOkJson, { status: 202 });
     const directUrl = pickUrl(genJson);
     if (directUrl) {
       const videoRes = await fetch(directUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
@@ -175,11 +254,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const contentRes = await fetch(`${baseUrl}/videos/${encodeURIComponent(id)}/content`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    // The "id" here is typically the tid.
+    const contentRes = await fetchVideoContent({ baseUrl, apiKey, tid: id });
     if (!contentRes.ok) {
       const t = await contentRes.text();
+      const pending = parsePendingTidFromText(t);
+      if (pending) return NextResponse.json(pending, { status: 202 });
       return new NextResponse(t || `Content fetch failed (${contentRes.status})`, { status: 502 });
     }
 
