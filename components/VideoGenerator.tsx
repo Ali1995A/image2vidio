@@ -6,7 +6,6 @@ import { py } from "../lib/pinyin";
 
 type Props = {
   doodleRef: React.RefObject<DoodlePadHandle | null>;
-  fallbackPngUrl: string | null;
 };
 
 const LS_KEY = "image2vidio.apiKey";
@@ -38,7 +37,7 @@ async function blobToDataUrl(blob: Blob) {
   return `data:${blob.type || "application/octet-stream"};base64,${base64}`;
 }
 
-export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
+export default function VideoGenerator({ doodleRef }: Props) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://aihubmix.com/v1");
   const [seconds, setSeconds] = useState(2);
@@ -358,18 +357,8 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         <div className="videoStage">
           {videoUrl ? (
             <video className="videoEl" src={videoUrl} controls playsInline />
-          ) : fallbackPngUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fallbackPngUrl}
-              alt="preview"
-              style={{ width: "100%", height: "100%", objectFit: "contain" }}
-            />
           ) : (
-            <div className="hint">
-              <span className="pinyin-text">{py("huà yì zhāng tú")}，{py("ránhòu")} {py("kāi shǐ")}</span>
-              （画一张图，然后开始）
-            </div>
+            <div className="hint" style={{ opacity: 0.35 }} />
           )}
         </div>
         <div className="hint">

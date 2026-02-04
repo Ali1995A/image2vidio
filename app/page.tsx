@@ -1,24 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import DoodlePad, { type DoodlePadHandle } from "../components/DoodlePad";
 import VideoGenerator from "../components/VideoGenerator";
 import { py } from "../lib/pinyin";
 
 export default function HomePage() {
   const doodleRef = useRef<DoodlePadHandle | null>(null);
-  const [lastPng, setLastPng] = useState<Blob | null>(null);
-  const [pngUrl, setPngUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!lastPng) {
-      setPngUrl(null);
-      return;
-    }
-    const u = URL.createObjectURL(lastPng);
-    setPngUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [lastPng]);
 
   return (
     <main className="appShell">
@@ -33,8 +21,6 @@ export default function HomePage() {
           </div>
           <DoodlePad
             ref={doodleRef}
-            onSnapshot={(blob) => setLastPng(blob)}
-            snapshotIntervalMs={700}
           />
         </div>
       </section>
@@ -49,7 +35,7 @@ export default function HomePage() {
             </div>
             <div className="chip">wan2.2 i2v · 1.5–3s</div>
           </div>
-          <VideoGenerator doodleRef={doodleRef} fallbackPngUrl={pngUrl} />
+          <VideoGenerator doodleRef={doodleRef} />
         </div>
       </section>
     </main>
