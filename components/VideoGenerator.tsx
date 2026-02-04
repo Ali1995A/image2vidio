@@ -136,19 +136,6 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
   return (
     <>
       <div className="controls">
-        <div className="row">
-          <div className="label">shíjiān 时间 · {clamp(seconds, 1.5, 3)}s</div>
-          <input
-            className="slider"
-            type="range"
-            min={1.5}
-            max={3}
-            step={0.5}
-            value={seconds}
-            onChange={(e) => setSeconds(Number(e.target.value))}
-          />
-        </div>
-
         <div className="btnRow">
           <button
             type="button"
@@ -174,6 +161,22 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
               fēnxiǎng 分享
             </button>
           ) : null}
+
+          <div className="timeInline" aria-label="video duration">
+            <div className="timeInlineLabel">
+              shíjiān 时间 · {clamp(seconds, 1.5, 3)}s
+            </div>
+            <input
+              className="slider timeInlineSlider"
+              type="range"
+              min={1.5}
+              max={3}
+              step={0.5}
+              value={seconds}
+              onChange={(e) => setSeconds(Number(e.target.value))}
+              disabled={isBusy}
+            />
+          </div>
         </div>
 
         {isAdvanced ? (

@@ -119,6 +119,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
   const [isMaximized, setIsMaximized] = useState(false);
   const [isColorWallOpen, setIsColorWallOpen] = useState(false);
   const [recentBrushColors, setRecentBrushColors] = useState<string[]>([]);
+  const [colorWallTarget, setColorWallTarget] = useState<"brush" | "bg">(
+    "brush",
+  );
   const lastPointRef = useRef<Point | null>(null);
   const drawingRef = useRef(false);
 
@@ -180,9 +183,18 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
     });
   };
 
-  const selectBrushColor = (hex: string) => {
-    setIsEraser(false);
-    setBrushColor(hex);
+  const openColorWall = (target: "brush" | "bg") => {
+    setColorWallTarget(target);
+    setIsColorWallOpen(true);
+  };
+
+  const selectColor = (hex: string, target: "brush" | "bg") => {
+    if (target === "brush") {
+      setIsEraser(false);
+      setBrushColor(hex);
+    } else {
+      setBgColor(hex);
+    }
     rememberBrushColor(hex);
   };
 
@@ -425,44 +437,47 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
         </div>
 
         <div className="row">
-          <div className="label">bǐsè 笔色 · dǐsè 底色</div>
-          <div className="colorRow">
-            <button
-              type="button"
-              className="swatch swatchOn"
-              style={{ background: brushColor }}
-              onClick={() => setIsColorWallOpen(true)}
-              aria-label="open color palette"
-              title={brushColor}
-            />
-            {palette.map((p) => (
+          <div className="label">tiáosè 调色</div>
+          <div className="colorPickRow">
+            <div className="colorPick">
+              <div className="colorPickLabel">bǐsè 笔色</div>
               <button
-                key={p.c}
                 type="button"
-                className={`swatch ${p.on ? "swatchOn" : ""}`}
-                style={{ background: p.c }}
-                onClick={() => selectBrushColor(p.c)}
-                aria-label={`color ${p.c}`}
-                title={p.c}
+                className="swatch swatchOn"
+                style={{ background: brushColor }}
+                onClick={() => openColorWall("brush")}
+                aria-label="open brush color palette"
+                title={brushColor}
               />
-            ))}
-            <input
-              className="input"
-              type="color"
-              value={brushColor}
-              onChange={(e) => selectBrushColor(e.target.value)}
-              aria-label="custom brush color"
-              style={{ height: 44, padding: 8, width: 64 }}
-            />
-            <div className="colorSpacer" aria-hidden="true" />
-            <input
-              className="input"
-              type="color"
-              value={bgColor}
-              onChange={(e) => setBgColor(e.target.value)}
-              aria-label="background color"
-              style={{ height: 44, padding: 8, width: 64 }}
-            />
+              <input
+                className="input"
+                type="color"
+                value={brushColor}
+                onChange={(e) => selectColor(e.target.value, "brush")}
+                aria-label="custom brush color"
+                style={{ height: 44, padding: 8, width: 64 }}
+              />
+            </div>
+
+            <div className="colorPick">
+              <div className="colorPickLabel">dǐsè 底色</div>
+              <button
+                type="button"
+                className="swatch swatchOn"
+                style={{ background: bgColor }}
+                onClick={() => openColorWall("bg")}
+                aria-label="open background color palette"
+                title={bgColor}
+              />
+              <input
+                className="input"
+                type="color"
+                value={bgColor}
+                onChange={(e) => selectColor(e.target.value, "bg")}
+                aria-label="custom background color"
+                style={{ height: 44, padding: 8, width: 64 }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -482,9 +497,78 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
           >
             <div className="colorPanelHeader">
               <div className="colorPanelTitle">tiáosè 调色板</div>
-              <button type="button" className="btn btnGhost" onClick={() => setIsColorWallOpen(false)}>
-                guānbì 关闭
-              </button>
+              <div className="colorPanelHeaderRight">
+                <div className="seg">
+                  <button
+                    type="button"
+                    className={`segBtn ${colorWallTarget === "brush" ? "segBtnOn" : ""}`}
+                    onClick={() => setColorWallTarget("brush")}
+                    aria-label="edit brush color"
+                  >
+                    bǐsè 笔色
+                  </button>
+                  <button
+                    type="button"
+                    className={`segBtn ${colorWallTarget === "bg" ? "segBtnOn" : ""}`}
+                    onClick={() => setColorWallTarget("bg")}
+                    aria-label="edit background color"
+                  >
+                    dǐsè 底色
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="btn btnGhost"
+                  onClick={() => setIsColorWallOpen(false)}
+                >
+                  guānbì 关闭
+                </button>
+              </div>
+            </div>
+
+            <div className="colorPanelSection">
+              <div className="colorPanelLabel">
+                {colorWallTarget === "brush" ? "bǐsè 笔色" : "dǐsè 底色"}
+              </div>
+              <div className="colorRow">
+                <button
+                  type="button"
+                  className="swatch swatchOn"
+                  style={{
+                    background: colorWallTarget === "brush" ? brushColor : bgColor,
+                  }}
+                  aria-label="current target color"
+                  title={colorWallTarget === "brush" ? brushColor : bgColor}
+                />
+                <input
+                  className="input"
+                  type="color"
+                  value={colorWallTarget === "brush" ? brushColor : bgColor}
+                  onChange={(e) => selectColor(e.target.value, colorWallTarget)}
+                  aria-label="pick target color"
+                  style={{ height: 44, padding: 8, width: 64 }}
+                />
+                <div className="hint" style={{ opacity: 0.85 }}>
+                  {colorWallTarget === "brush" ? "huàbǐ 画笔" : "dǐsè 底色"}
+                </div>
+              </div>
+            </div>
+
+            <div className="colorPanelSection">
+              <div className="colorPanelLabel">kuàisù 快速</div>
+              <div className="colorWall12">
+                {palette.map((p) => (
+                  <button
+                    key={p.c}
+                    type="button"
+                    className={`colorChip ${normalizeHex(colorWallTarget === "brush" ? brushColor : bgColor) === normalizeHex(p.c) ? "colorChipOn" : ""}`}
+                    style={{ background: p.c }}
+                    onClick={() => selectColor(p.c, colorWallTarget)}
+                    aria-label={`favorite ${p.c}`}
+                    title={p.c}
+                  />
+                ))}
+              </div>
             </div>
 
             <div className="colorPanelSection">
@@ -494,9 +578,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                   <button
                     key={c}
                     type="button"
-                    className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                    className={`colorChip ${(colorWallTarget === "brush" ? brushColor : bgColor).toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
                     style={{ background: c }}
-                    onClick={() => selectBrushColor(c)}
+                    onClick={() => selectColor(c, colorWallTarget)}
                     aria-label={`gray ${c}`}
                     title={c}
                   />
@@ -512,9 +596,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                     <button
                       key={c}
                       type="button"
-                      className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                      className={`colorChip ${(colorWallTarget === "brush" ? brushColor : bgColor).toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
                       style={{ background: c }}
-                      onClick={() => selectBrushColor(c)}
+                      onClick={() => selectColor(c, colorWallTarget)}
                       aria-label={`recent ${c}`}
                       title={c}
                     />
@@ -530,9 +614,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                   <button
                     key={c}
                     type="button"
-                    className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                    className={`colorChip ${(colorWallTarget === "brush" ? brushColor : bgColor).toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
                     style={{ background: c }}
-                    onClick={() => selectBrushColor(c)}
+                    onClick={() => selectColor(c, colorWallTarget)}
                     aria-label={`color ${c}`}
                     title={c}
                   />
