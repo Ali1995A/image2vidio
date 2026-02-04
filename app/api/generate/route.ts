@@ -45,12 +45,32 @@ function parsePendingTidFromText(text: string): PendingResult | null {
 }
 
 function parsePendingTidFromJson(json: unknown): PendingResult | null {
-  if (!json || typeof json !== "object") return null;
+  if (!json) return null;
+
+  if (typeof json === "string") return parsePendingTidFromText(json);
+  if (typeof json !== "object") return null;
+
   const anyJson = json as Record<string, any>;
-  const msg =
-    anyJson?.error?.message ?? anyJson?.message ?? anyJson?.error ?? anyJson?.detail;
-  if (typeof msg !== "string") return null;
-  return parsePendingTidFromText(msg);
+  const candidates = [
+    anyJson?.error?.message,
+    anyJson?.message,
+    anyJson?.error,
+    anyJson?.detail,
+    anyJson?.raw,
+  ];
+
+  for (const c of candidates) {
+    if (typeof c !== "string") continue;
+    const pending = parsePendingTidFromText(c);
+    if (pending) return pending;
+  }
+
+  try {
+    const s = JSON.stringify(json);
+    return parsePendingTidFromText(s.slice(0, 2000));
+  } catch {
+    return null;
+  }
 }
 
 function pickId(json: unknown): string | null {
