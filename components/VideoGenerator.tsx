@@ -15,6 +15,19 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
+  const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+  if (head.length >= 12) {
+    // MP4: [size][ftyp]...
+    if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) return "video/mp4";
+  }
+  if (head.length >= 4) {
+    // WebM/Matroska EBML header
+    if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return "video/webm";
+  }
+  return null;
+}
+
 async function blobToDataUrl(blob: Blob) {
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -96,11 +109,32 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         const text = await res.text();
         throw new Error(text || `HTTP ${res.status}`);
       }
-      const blob = await res.blob();
-      if (!blob.type.startsWith("video/")) {
-        throw new Error("fǎnhuí bùshì shìpín（返回不是视频）");
+
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(text || "fǎnhuí bùshì shìpín（返回不是视频）");
       }
-      setVideoBlob(blob);
+
+      const blob = await res.blob();
+      const hinted =
+        ct.startsWith("video/") ? ct.split(";")[0].trim() :
+        ct.includes("application/octet-stream") ? "video/mp4" :
+        blob.type && blob.type.startsWith("video/") ? blob.type :
+        null;
+
+      const sniffed = hinted ?? (await sniffBlobVideoType(blob));
+      if (!sniffed) {
+        const snippet = await blob.slice(0, 400).text().catch(() => "");
+        throw new Error(
+          snippet
+            ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
+            : "fǎnhuí bùshì shìpín（返回不是视频）",
+        );
+      }
+
+      const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
+      setVideoBlob(video);
       setStatus("wánchéng!（完成!）");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

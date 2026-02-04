@@ -2,6 +2,29 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+function sniffVideoContentType(contentType: string, buf: ArrayBuffer): string | null {
+  const ct = (contentType || "").split(";")[0]?.trim().toLowerCase();
+  if (ct.startsWith("video/")) return ct;
+
+  const bytes = new Uint8Array(buf);
+
+  // MP4: [size][ftyp]...
+  if (bytes.length >= 12) {
+    if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+      return "video/mp4";
+    }
+  }
+
+  // WebM/Matroska EBML header: 1A 45 DF A3
+  if (bytes.length >= 4) {
+    if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
+      return "video/webm";
+    }
+  }
+
+  return null;
+}
+
 function pickId(json: unknown): string | null {
   if (!json || typeof json !== "object") return null;
   const anyJson = json as Record<string, unknown>;
@@ -85,12 +108,17 @@ export async function POST(req: Request) {
       return new NextResponse(t || `Upstream error (${genRes.status})`, { status: 502 });
     }
 
-    if (genContentType.startsWith("video/")) {
+    const isProbablyBinary =
+      genContentType.startsWith("video/") ||
+      genContentType.toLowerCase().includes("application/octet-stream");
+
+    if (isProbablyBinary) {
       const ab = await genRes.arrayBuffer();
+      const sniffed = sniffVideoContentType(genContentType, ab) ?? "video/mp4";
       return new NextResponse(ab, {
         status: 200,
         headers: {
-          "content-type": genContentType,
+          "content-type": sniffed,
           "cache-control": "no-store",
         },
       });
@@ -104,12 +132,13 @@ export async function POST(req: Request) {
         const t = await videoRes.text();
         return new NextResponse(t || `Video fetch failed (${videoRes.status})`, { status: 502 });
       }
-      const ct = videoRes.headers.get("content-type") || "video/mp4";
+      const ct = videoRes.headers.get("content-type") || "";
       const ab = await videoRes.arrayBuffer();
+      const sniffed = sniffVideoContentType(ct, ab) ?? "video/mp4";
       return new NextResponse(ab, {
         status: 200,
         headers: {
-          "content-type": ct,
+          "content-type": sniffed,
           "cache-control": "no-store",
         },
       });
@@ -131,12 +160,13 @@ export async function POST(req: Request) {
       return new NextResponse(t || `Content fetch failed (${contentRes.status})`, { status: 502 });
     }
 
-    const ct = contentRes.headers.get("content-type") || "video/mp4";
+    const ct = contentRes.headers.get("content-type") || "";
     const ab = await contentRes.arrayBuffer();
+    const sniffed = sniffVideoContentType(ct, ab) ?? "video/mp4";
     return new NextResponse(ab, {
       status: 200,
       headers: {
-        "content-type": ct,
+        "content-type": sniffed,
         "cache-control": "no-store",
       },
     });
