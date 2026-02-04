@@ -27,7 +27,7 @@ async function blobToDataUrl(blob: Blob) {
 export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://aihubmix.com/v1");
-  const [seconds, setSeconds] = useState(4);
+  const [seconds, setSeconds] = useState(2);
   const [prompt, setPrompt] = useState(
     "anime style, cute, colorful, clean lines, soft lighting, smooth motion",
   );
@@ -71,7 +71,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
-    const sec = clamp(seconds, 3, 5);
+    const sec = clamp(seconds, 1.5, 3);
     if (!doodleRef.current) {
       setError("huàbù wúfǎ dúqǔ（画布无法读取）");
       return;
@@ -137,12 +137,13 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     <>
       <div className="controls">
         <div className="row">
-          <div className="label">shíjiān 时间 · {clamp(seconds, 3, 5)}s</div>
+          <div className="label">shíjiān 时间 · {clamp(seconds, 1.5, 3)}s</div>
           <input
             className="slider"
             type="range"
-            min={3}
-            max={5}
+            min={1.5}
+            max={3}
+            step={0.5}
             value={seconds}
             onChange={(e) => setSeconds(Number(e.target.value))}
           />

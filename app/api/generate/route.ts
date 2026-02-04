@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     const baseUrl = String(body?.baseUrl || envBaseUrl || "https://aihubmix.com/v1")
       .trim()
       .replace(/\/$/, "");
-    const seconds = Number(body?.seconds || 4);
+    const seconds = Number(body?.seconds || 2);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
-    const duration = Math.max(3, Math.min(5, Number.isFinite(seconds) ? seconds : 4));
+    const duration = Math.max(1.5, Math.min(3, Number.isFinite(seconds) ? seconds : 2));
 
     const pngBlob = await dataUrlToBlob(imageDataUrl);
     const form = new FormData();

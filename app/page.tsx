@@ -39,7 +39,7 @@ export default function HomePage() {
         <div className="panelInner">
           <div className="panelHeader">
             <div className="panelTitle">yòubiān 右边 · dòngmàn 动漫视频</div>
-            <div className="chip">wan2.2 i2v · 3–5s</div>
+            <div className="chip">wan2.2 i2v · 1.5–3s</div>
           </div>
           <VideoGenerator doodleRef={doodleRef} fallbackPngUrl={pngUrl} />
         </div>
