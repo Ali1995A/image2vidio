@@ -129,16 +129,35 @@ export async function POST(req: Request) {
 
       const contentRes = await fetchVideoContent({ baseUrl, apiKey, tid });
       const ct = contentRes.headers.get("content-type") || "";
+      const ctLower = ct.toLowerCase();
       if (!contentRes.ok) {
         const text = await contentRes.text();
         const pending = parsePendingTidFromText(text);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || `Content fetch failed (${contentRes.status})`, { status: 502 });
       }
+
+      // Some upstreams return JSON with 200 while still processing.
+      if (ctLower.includes("application/json")) {
+        const text = await contentRes.text();
+        const maybeJson = (() => {
+          try {
+            return JSON.parse(text) as unknown;
+          } catch {
+            return null;
+          }
+        })();
+        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+        if (pending) return NextResponse.json(pending, { status: 202 });
+        return new NextResponse(text || "Upstream returned json, not video", { status: 502 });
+      }
+
       const ab = await contentRes.arrayBuffer();
       const sniffed = sniffVideoContentType(ct, ab);
       if (!sniffed) {
         const snippet = arrayBufferToTextSnippet(ab, 800);
+        const pending = parsePendingTidFromText(snippet);
+        if (pending) return NextResponse.json(pending, { status: 202 });
         return NextResponse.json(
           {
             error: "Content response is not a known video container",

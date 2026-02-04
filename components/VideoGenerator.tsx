@@ -37,6 +37,11 @@ async function blobToDataUrl(blob: Blob) {
   return `data:${blob.type || "application/octet-stream"};base64,${base64}`;
 }
 
+function extractTidFromText(text: string) {
+  const m = /tid:\s*([0-9]+)/i.exec(String(text || ""));
+  return m ? m[1] : "";
+}
+
 export default function VideoGenerator({ doodleRef }: Props) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://aihubmix.com/v1");
@@ -165,6 +170,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
       if (!res.ok) {
         const text = await res.text();
+        const tid = extractTidFromText(text);
+        if (tid) {
+          await tryHandlePending(tid);
+          return;
+        }
         throw new Error(text || `HTTP ${res.status}`);
       }
 
