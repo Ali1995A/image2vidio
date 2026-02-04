@@ -17,6 +17,24 @@
   --radius: 22px;
 }
 
+@font-face {
+  font-family: "CC Pinyin";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cc-pinyin.woff2") format("woff2");
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0100-017F, U+0180-02AF, U+0251, U+0300-036F;
+}
+
+.pinyin-text {
+  font-family: "CC Pinyin", ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "clig" 0;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
 html,
 body {
   height: 100%;

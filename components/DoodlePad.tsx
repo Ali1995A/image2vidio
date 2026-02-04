@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { py } from "../lib/pinyin";
 
 export type DoodlePadHandle = {
   exportPngBlob: () => Promise<Blob>;
@@ -402,29 +403,30 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
             className={`btn ${!isEraser ? "btnOn" : ""}`}
             onClick={() => setIsEraser(false)}
           >
-            huàbǐ 画笔
+            <span className="pinyin-text">{py("huà bǐ")}</span> 画笔
           </button>
           <button
             type="button"
             className={`btn ${isEraser ? "btnOn" : ""}`}
             onClick={() => setIsEraser(true)}
           >
-            xiàngpí 橡皮
+            <span className="pinyin-text">{py("xiàng pí")}</span> 橡皮
           </button>
           <button type="button" className="btn btnGhost" onClick={clear}>
-            qīngchú 清除
+            <span className="pinyin-text">{py("qīng chú")}</span> 清除
           </button>
           <button type="button" className="btn btnGhost" onClick={loadImage}>
-            túpiàn 图片
+            <span className="pinyin-text">{py("tú piàn")}</span> 图片
           </button>
           <button type="button" className="btn btnGhost" onClick={toggleFullscreen}>
-            quánpíng 全屏
+            <span className="pinyin-text">{py("quán píng")}</span> 全屏
           </button>
         </div>
 
         <div className="row">
           <div className="label">
-            bǐkuān 笔宽 · <span aria-label="width">{widthLabel}</span>
+            <span className="pinyin-text">{py("bǐ kuān")}</span> 笔宽 ·{" "}
+            <span aria-label="width">{widthLabel}</span>
           </div>
           <input
             className="slider"
@@ -437,10 +439,14 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
         </div>
 
         <div className="row">
-          <div className="label">tiáosè 调色</div>
+          <div className="label">
+            <span className="pinyin-text">{py("tiáo sè")}</span> 调色
+          </div>
           <div className="colorPickRow">
             <div className="colorPick">
-              <div className="colorPickLabel">bǐsè 笔色</div>
+              <div className="colorPickLabel">
+                <span className="pinyin-text">{py("bǐ sè")}</span> 笔色
+              </div>
               <button
                 type="button"
                 className="swatch swatchOn"
@@ -460,7 +466,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
             </div>
 
             <div className="colorPick">
-              <div className="colorPickLabel">dǐsè 底色</div>
+              <div className="colorPickLabel">
+                <span className="pinyin-text">{py("dǐ sè")}</span> 底色
+              </div>
               <button
                 type="button"
                 className="swatch swatchOn"
@@ -496,7 +504,9 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
             onTouchStart={(e) => e.stopPropagation()}
           >
             <div className="colorPanelHeader">
-              <div className="colorPanelTitle">tiáosè 调色板</div>
+              <div className="colorPanelTitle">
+                <span className="pinyin-text">{py("tiáo sè")}</span> 调色板
+              </div>
               <div className="colorPanelHeaderRight">
                 <div className="seg">
                   <button
@@ -505,7 +515,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                     onClick={() => setColorWallTarget("brush")}
                     aria-label="edit brush color"
                   >
-                    bǐsè 笔色
+                    <span className="pinyin-text">{py("bǐ sè")}</span> 笔色
                   </button>
                   <button
                     type="button"
@@ -513,7 +523,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                     onClick={() => setColorWallTarget("bg")}
                     aria-label="edit background color"
                   >
-                    dǐsè 底色
+                    <span className="pinyin-text">{py("dǐ sè")}</span> 底色
                   </button>
                 </div>
                 <button
@@ -521,14 +531,22 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                   className="btn btnGhost"
                   onClick={() => setIsColorWallOpen(false)}
                 >
-                  guānbì 关闭
+                  <span className="pinyin-text">{py("guān bì")}</span> 关闭
                 </button>
               </div>
             </div>
 
             <div className="colorPanelSection">
               <div className="colorPanelLabel">
-                {colorWallTarget === "brush" ? "bǐsè 笔色" : "dǐsè 底色"}
+                {colorWallTarget === "brush" ? (
+                  <>
+                    <span className="pinyin-text">{py("bǐ sè")}</span> 笔色
+                  </>
+                ) : (
+                  <>
+                    <span className="pinyin-text">{py("dǐ sè")}</span> 底色
+                  </>
+                )}
               </div>
               <div className="colorRow">
                 <button
@@ -549,13 +567,23 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
                   style={{ height: 44, padding: 8, width: 64 }}
                 />
                 <div className="hint" style={{ opacity: 0.85 }}>
-                  {colorWallTarget === "brush" ? "huàbǐ 画笔" : "dǐsè 底色"}
+                  {colorWallTarget === "brush" ? (
+                    <>
+                      <span className="pinyin-text">{py("huà bǐ")}</span> 画笔
+                    </>
+                  ) : (
+                    <>
+                      <span className="pinyin-text">{py("dǐ sè")}</span> 底色
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="colorPanelSection">
-              <div className="colorPanelLabel">kuàisù 快速</div>
+              <div className="colorPanelLabel">
+                <span className="pinyin-text">{py("kuài sù")}</span> 快速
+              </div>
               <div className="colorWall12">
                 {palette.map((p) => (
                   <button
@@ -638,8 +666,10 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
           <canvas ref={canvasRef} className="canvasEl" />
         </div>
         <div className="hint">
-          wánfǎ 玩法：yòng shǒuzhǐ huà 用手指画 · yòng xiàngpí cā 用橡皮擦 · kě jiāzài túpiàn
-          可加载图片
+          <span className="pinyin-text">{py("wán fǎ")}</span> 玩法：{" "}
+          <span className="pinyin-text">{py("yòng")} {py("shǒu zhǐ")} {py("huà")}</span> 用手指画 ·{" "}
+          <span className="pinyin-text">{py("yòng")} {py("xiàng pí")} {py("cā")}</span> 用橡皮擦 ·{" "}
+          <span className="pinyin-text">{py("kě")} {py("jiā zài")} {py("tú piàn")}</span> 可加载图片
         </div>
       </div>
 

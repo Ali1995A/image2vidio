@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DoodlePadHandle } from "./DoodlePad";
+import { py } from "../lib/pinyin";
 
 type Props = {
   doodleRef: React.RefObject<DoodlePadHandle | null>;
@@ -86,12 +87,12 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     setVideoBlob(null);
     const sec = clamp(seconds, 1.5, 3);
     if (!doodleRef.current) {
-      setError("huàbù wúfǎ dúqǔ（画布无法读取）");
+      setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
     }
     setIsBusy(true);
     try {
-      setStatus("shēngchéng zhōng…（生成中…）");
+      setStatus(`${py("shēng chéng zhōng")}…（生成中…）`);
       const pngBlob = await doodleRef.current.exportPngBlob();
       const pngDataUrl = await blobToDataUrl(pngBlob);
       const res = await fetch("/api/generate", {
@@ -135,7 +136,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
 
       const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
       setVideoBlob(video);
-      setStatus("wánchéng!（完成!）");
+      setStatus(`${py("wán chéng")}!（完成!）`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStatus("");
@@ -161,7 +162,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     const nav: any = navigator;
     try {
       const file = new File([videoBlob], "image2vidio.mp4", { type: videoBlob.type });
-      await nav.share({ files: [file], title: "image2vidio", text: "dòngmàn shìpín 动漫视频" });
+      await nav.share({ files: [file], title: "image2vidio", text: `${py("dòng màn shì pín")} 动漫视频` });
     } catch {
       // ignore
     }
@@ -177,7 +178,7 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
             onClick={onGenerate}
             disabled={isBusy}
           >
-            kāishǐ 开始
+            <span className="pinyin-text">{py("kāi shǐ")}</span> 开始
           </button>
           <button
             type="button"
@@ -185,20 +186,20 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
             onClick={() => setIsAdvanced((v) => !v)}
             disabled={isBusy}
           >
-            gāojí 高级
+            <span className="pinyin-text">{py("gāo jí")}</span> 高级
           </button>
           <button type="button" className="btn" onClick={onDownload} disabled={!videoBlob}>
-            xiàzài 下载
+            <span className="pinyin-text">{py("xià zǎi")}</span> 下载
           </button>
           {canShare ? (
             <button type="button" className="btn" onClick={onShare} disabled={!videoBlob}>
-              fēnxiǎng 分享
+              <span className="pinyin-text">{py("fēn xiǎng")}</span> 分享
             </button>
           ) : null}
 
           <div className="timeInline" aria-label="video duration">
             <div className="timeInlineLabel">
-              shíjiān 时间 · {clamp(seconds, 1.5, 3)}s
+              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1.5, 3)}s
             </div>
             <input
               className="slider timeInlineSlider"
@@ -216,19 +217,23 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         {isAdvanced ? (
           <>
             <div className="row">
-              <div className="label">yáoshi 钥匙 · API Key</div>
+              <div className="label">
+                <span className="pinyin-text">{py("yào shí")}</span> 钥匙 · API Key
+              </div>
               <input
                 className="input"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="kě bù tián（可不填：yòng Vercel 环境变量）"
+                placeholder={`${py("kě bù tián")}（可不填：yòng Vercel 环境变量）`}
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
               />
             </div>
             <div className="row">
-              <div className="label">dǐzhǐ 地址 · Base URL</div>
+              <div className="label">
+                <span className="pinyin-text">{py("dì zhǐ")}</span> 地址 · Base URL
+              </div>
               <input
                 className="input"
                 value={baseUrl}
@@ -240,7 +245,9 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
               />
             </div>
             <div className="row">
-              <div className="label">tíshì 提示 · Prompt</div>
+              <div className="label">
+                <span className="pinyin-text">{py("tí shì")}</span> 提示 · Prompt
+              </div>
               <input
                 className="input"
                 value={prompt}
@@ -271,11 +278,17 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
               style={{ width: "100%", height: "100%", objectFit: "contain" }}
             />
           ) : (
-            <div className="hint">huà yízhāng tú, ránhòu kāishǐ（画一张图，然后开始）</div>
+            <div className="hint">
+              <span className="pinyin-text">{py("huà yì zhāng tú")}，{py("ránhòu")} {py("kāi shǐ")}</span>
+              （画一张图，然后开始）
+            </div>
           )}
         </div>
         <div className="hint">
-          iOS xiàzài shí：diǎn “xiàzài 下载” hòu, kě zài “Wénjiàn 文件” lǐ zhǎo（iOS 下载时：点“下载”后，可在“文件”里找）
+          <span className="pinyin-text">
+            {py("iOS xià zǎi shí")}：{py("diǎn")} “{py("xià zǎi")} 下载” {py("hòu")}，{py("kě")} {py("zài")} “{py("wén jiàn")} 文件” {py("lǐ")} {py("zhǎo")}
+          </span>
+          （iOS 下载时：点“下载”后，可在“文件”里找）
         </div>
       </div>
     </>
