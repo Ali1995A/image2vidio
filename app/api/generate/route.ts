@@ -44,13 +44,21 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const apiKey = String(body?.apiKey || "").trim();
-    const baseUrl = String(body?.baseUrl || "https://aihubmix.com/v1").trim().replace(/\/$/, "");
+    const envApiKey = String(process.env.AIHUBMIX_API_KEY || "").trim();
+    const envBaseUrl = String(process.env.AIHUBMIX_BASE_URL || "").trim();
+    const apiKey = String(body?.apiKey || envApiKey || "").trim();
+    const baseUrl = String(body?.baseUrl || envBaseUrl || "https://aihubmix.com/v1")
+      .trim()
+      .replace(/\/$/, "");
     const seconds = Number(body?.seconds || 4);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
 
-    if (!apiKey) return new NextResponse("Missing apiKey", { status: 400 });
+    if (!apiKey)
+      return new NextResponse(
+        "Missing apiKey. Set AIHUBMIX_API_KEY in Vercel env (or pass apiKey from client).",
+        { status: 400 },
+      );
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
@@ -139,4 +147,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

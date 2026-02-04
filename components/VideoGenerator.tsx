@@ -72,10 +72,6 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     setStatus("");
     setVideoBlob(null);
     const sec = clamp(seconds, 3, 5);
-    if (!apiKey.trim()) {
-      setError("qǐng tián rù API Key（请填入 API Key）");
-      return;
-    }
     if (!doodleRef.current) {
       setError("huàbù wúfǎ dúqǔ（画布无法读取）");
       return;
@@ -141,19 +137,6 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
     <>
       <div className="controls">
         <div className="row">
-          <div className="label">yáoshi 钥匙 · API Key</div>
-          <input
-            className="input"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="zài zhèlǐ tián…（在这里填…）"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
-
-        <div className="row">
           <div className="label">shíjiān 时间 · {clamp(seconds, 3, 5)}s</div>
           <input
             className="slider"
@@ -195,6 +178,18 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         {isAdvanced ? (
           <>
             <div className="row">
+              <div className="label">yáoshi 钥匙 · API Key</div>
+              <input
+                className="input"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="kě bù tián（可不填：yòng Vercel 环境变量）"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+            <div className="row">
               <div className="label">dǐzhǐ 地址 · Base URL</div>
               <input
                 className="input"
@@ -219,6 +214,11 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         ) : null}
 
         {status ? <div className="hint">{status}</div> : null}
+        {!isAdvanced ? (
+          <div className="hint">
+            tíxǐng 提醒：API Key jiàn yì fàng zài Vercel huánjìng biànliàng（API Key 建议放在 Vercel 环境变量）
+          </div>
+        ) : null}
         {error ? (
           <div className="hint" style={{ color: "#b4235a", fontWeight: 800 }}>
             {error}

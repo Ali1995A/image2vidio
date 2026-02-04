@@ -19,5 +19,11 @@ npm run dev
 
 ## API Key
 
-页面右侧输入框里填你的 `API Key`（保存到浏览器本地 `localStorage`）。
+推荐用环境变量（更安全）：
 
+- 本地：复制 `.env.example` → `.env`，填 `AIHUBMIX_API_KEY`
+- Vercel：Project → Settings → Environment Variables
+  - `AIHUBMIX_API_KEY`（必填）
+  - `AIHUBMIX_BASE_URL`（可选，默认 `https://aihubmix.com/v1`）
+
+右侧 “gāojí 高级” 里也可临时输入 `API Key`（不推荐长期使用）。
