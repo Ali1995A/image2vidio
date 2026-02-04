@@ -20,6 +20,8 @@ type Props = {
 
 type Point = { x: number; y: number };
 
+const LS_RECENT_BRUSH = "image2vidio.recentBrushColors";
+
 const PALETTE = [
   "#ff2f8f",
   "#ff5aa8",
@@ -34,6 +36,42 @@ const PALETTE = [
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function hslToHex(h: number, s: number, l: number) {
+  const hh = ((h % 360) + 360) % 360;
+  const ss = Math.max(0, Math.min(100, s)) / 100;
+  const ll = Math.max(0, Math.min(100, l)) / 100;
+
+  const c = (1 - Math.abs(2 * ll - 1)) * ss;
+  const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+  const m = ll - c / 2;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (hh < 60) [r, g, b] = [c, x, 0];
+  else if (hh < 120) [r, g, b] = [x, c, 0];
+  else if (hh < 180) [r, g, b] = [0, c, x];
+  else if (hh < 240) [r, g, b] = [0, x, c];
+  else if (hh < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+
+  const toHex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function grayHex(v: number) {
+  const x = Math.max(0, Math.min(255, Math.round(v)));
+  const h = x.toString(16).padStart(2, "0");
+  return `#${h}${h}${h}`;
+}
+
+function normalizeHex(hex: string) {
+  const s = String(hex || "").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(s)) return s;
+  return "";
 }
 
 function getPointerPos(e: PointerEvent, el: HTMLCanvasElement): Point {
@@ -79,10 +117,74 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
   const [isEraser, setIsEraser] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isColorWallOpen, setIsColorWallOpen] = useState(false);
+  const [recentBrushColors, setRecentBrushColors] = useState<string[]>([]);
   const lastPointRef = useRef<Point | null>(null);
   const drawingRef = useRef(false);
 
   const widthLabel = useMemo(() => `${brushWidth}px`, [brushWidth]);
+
+  const palette256 = useMemo(() => {
+    const hues = 16;
+    const lightness = [22, 28, 34, 40, 48, 58, 68, 78];
+    const sats = [92, 62];
+    const out: string[] = [];
+
+    const rows: Array<{ sat: number; light: number }> = [];
+    for (let li = 0; li < lightness.length; li++) {
+      for (let si = 0; si < sats.length; si++) rows.push({ sat: sats[si], light: lightness[li] });
+    }
+
+    for (const row of rows) {
+      for (let h = 0; h < hues; h++) {
+        const hue = Math.round((360 / hues) * h);
+        out.push(hslToHex(hue, row.sat, row.light));
+      }
+    }
+
+    return out.slice(0, 256);
+  }, []);
+
+  const grays32 = useMemo(() => {
+    const out: string[] = [];
+    for (let i = 0; i < 32; i++) out.push(grayHex((255 / 31) * i));
+    return out;
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LS_RECENT_BRUSH);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+      if (!Array.isArray(parsed)) return;
+      const cleaned = parsed
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => normalizeHex(v))
+        .filter(Boolean);
+      if (cleaned.length) setRecentBrushColors(cleaned.slice(0, 12));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const rememberBrushColor = (hex: string) => {
+    const c = normalizeHex(hex);
+    if (!c) return;
+    setRecentBrushColors((prev) => {
+      const next = [c, ...prev.filter((p) => p !== c)].slice(0, 12);
+      try {
+        window.localStorage.setItem(LS_RECENT_BRUSH, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const selectBrushColor = (hex: string) => {
+    setIsEraser(false);
+    setBrushColor(hex);
+    rememberBrushColor(hex);
+  };
 
   useImperativeHandle(ref, () => ({
     exportPngBlob: async () => {
@@ -323,39 +425,123 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
         </div>
 
         <div className="row">
-          <div className="label">bǐsè 笔色</div>
+          <div className="label">bǐsè 笔色 · dǐsè 底色</div>
           <div className="colorRow">
+            <button
+              type="button"
+              className="swatch swatchOn"
+              style={{ background: brushColor }}
+              onClick={() => setIsColorWallOpen(true)}
+              aria-label="open color palette"
+              title={brushColor}
+            />
             {palette.map((p) => (
               <button
                 key={p.c}
                 type="button"
                 className={`swatch ${p.on ? "swatchOn" : ""}`}
                 style={{ background: p.c }}
-                onClick={() => setBrushColor(p.c)}
+                onClick={() => selectBrushColor(p.c)}
                 aria-label={`color ${p.c}`}
                 title={p.c}
               />
             ))}
-          </div>
-        </div>
-
-        <div className="row">
-          <div className="label">dǐsè 底色</div>
-          <div className="colorRow">
+            <input
+              className="input"
+              type="color"
+              value={brushColor}
+              onChange={(e) => selectBrushColor(e.target.value)}
+              aria-label="custom brush color"
+              style={{ height: 44, padding: 8, width: 64 }}
+            />
+            <div className="colorSpacer" aria-hidden="true" />
             <input
               className="input"
               type="color"
               value={bgColor}
               onChange={(e) => setBgColor(e.target.value)}
               aria-label="background color"
-              style={{ height: 48, padding: 8 }}
+              style={{ height: 44, padding: 8, width: 64 }}
             />
-            <div className="hint">
-              {isFullscreen || isMaximized ? "quánpíng zhōng 全屏中" : "ké yǐ quánpíng 可以全屏"}
-            </div>
           </div>
         </div>
       </div>
+
+      {isColorWallOpen ? (
+        <div
+          className="overlay"
+          role="dialog"
+          aria-label="Color palette"
+          onMouseDown={() => setIsColorWallOpen(false)}
+          onTouchStart={() => setIsColorWallOpen(false)}
+        >
+          <div
+            className="colorPanel"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <div className="colorPanelHeader">
+              <div className="colorPanelTitle">tiáosè 调色板</div>
+              <button type="button" className="btn btnGhost" onClick={() => setIsColorWallOpen(false)}>
+                guānbì 关闭
+              </button>
+            </div>
+
+            <div className="colorPanelSection">
+              <div className="colorPanelLabel">hēibáihuī 黑白灰</div>
+              <div className="colorWall">
+                {grays32.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                    style={{ background: c }}
+                    onClick={() => selectBrushColor(c)}
+                    aria-label={`gray ${c}`}
+                    title={c}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {recentBrushColors.length ? (
+              <div className="colorPanelSection">
+                <div className="colorPanelLabel">zuìjìn 最近 · Recent</div>
+                <div className="colorWall12">
+                  {recentBrushColors.slice(0, 12).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                      style={{ background: c }}
+                      onClick={() => selectBrushColor(c)}
+                      aria-label={`recent ${c}`}
+                      title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="colorPanelSection">
+              <div className="colorPanelLabel">256</div>
+              <div className="colorWall">
+                {palette256.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`colorChip ${brushColor.toLowerCase() === c.toLowerCase() ? "colorChipOn" : ""}`}
+                    style={{ background: c }}
+                    onClick={() => selectBrushColor(c)}
+                    aria-label={`color ${c}`}
+                    title={c}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="canvasWrap">
         <div

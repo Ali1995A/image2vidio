@@ -215,11 +215,6 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         ) : null}
 
         {status ? <div className="hint">{status}</div> : null}
-        {!isAdvanced ? (
-          <div className="hint">
-            tíxǐng 提醒：API Key jiàn yì fàng zài Vercel huánjìng biànliàng（API Key 建议放在 Vercel 环境变量）
-          </div>
-        ) : null}
         {error ? (
           <div className="hint" style={{ color: "#b4235a", fontWeight: 800 }}>
             {error}
