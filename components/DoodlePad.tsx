@@ -78,6 +78,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
   const [brushWidth, setBrushWidth] = useState(14);
   const [isEraser, setIsEraser] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const lastPointRef = useRef<Point | null>(null);
   const drawingRef = useRef(false);
 
@@ -232,7 +233,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
         await document.exitFullscreen();
       }
     } catch {
-      // ignore
+      setIsMaximized((v) => !v);
     }
   };
 
@@ -350,7 +351,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
               style={{ height: 48, padding: 8 }}
             />
             <div className="hint">
-              {isFullscreen ? "quánpíng zhōng 全屏中" : "ké yǐ quánpíng 可以全屏"}
+              {isFullscreen || isMaximized ? "quánpíng zhōng 全屏中" : "ké yǐ quánpíng 可以全屏"}
             </div>
           </div>
         </div>
@@ -359,7 +360,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       <div className="canvasWrap">
         <div
           ref={stageRef}
-          className="canvasStage"
+          className={`canvasStage ${isMaximized ? "canvasStageMax" : ""}`}
           style={{
             background: bgColor,
           }}
@@ -384,4 +385,3 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
 });
 
 export default DoodlePad;
-
