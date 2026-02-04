@@ -25,6 +25,15 @@ function sniffVideoContentType(contentType: string, buf: ArrayBuffer): string | 
   return null;
 }
 
+function arrayBufferToTextSnippet(buf: ArrayBuffer, maxChars: number) {
+  try {
+    const text = Buffer.from(buf).toString("utf8");
+    return text.slice(0, maxChars);
+  } catch {
+    return "";
+  }
+}
+
 function pickId(json: unknown): string | null {
   if (!json || typeof json !== "object") return null;
   const anyJson = json as Record<string, unknown>;
@@ -114,11 +123,25 @@ export async function POST(req: Request) {
 
     if (isProbablyBinary) {
       const ab = await genRes.arrayBuffer();
-      const sniffed = sniffVideoContentType(genContentType, ab) ?? "video/mp4";
+      const sniffed = sniffVideoContentType(genContentType, ab);
+
+      // If upstream gives octet-stream but it's not a real video, don't lie with video/mp4.
+      if (!sniffed && genContentType.toLowerCase().includes("application/octet-stream")) {
+        const snippet = arrayBufferToTextSnippet(ab, 800);
+        return NextResponse.json(
+          {
+            error: "Upstream returned octet-stream but not a known video container",
+            upstreamContentType: genContentType,
+            snippet: snippet || undefined,
+          },
+          { status: 502 },
+        );
+      }
+
       return new NextResponse(ab, {
         status: 200,
         headers: {
-          "content-type": sniffed,
+          "content-type": sniffed ?? genContentType ?? "video/mp4",
           "cache-control": "no-store",
         },
       });
@@ -134,11 +157,11 @@ export async function POST(req: Request) {
       }
       const ct = videoRes.headers.get("content-type") || "";
       const ab = await videoRes.arrayBuffer();
-      const sniffed = sniffVideoContentType(ct, ab) ?? "video/mp4";
+      const sniffed = sniffVideoContentType(ct, ab);
       return new NextResponse(ab, {
         status: 200,
         headers: {
-          "content-type": sniffed,
+          "content-type": sniffed ?? ct ?? "video/mp4",
           "cache-control": "no-store",
         },
       });
@@ -162,11 +185,11 @@ export async function POST(req: Request) {
 
     const ct = contentRes.headers.get("content-type") || "";
     const ab = await contentRes.arrayBuffer();
-    const sniffed = sniffVideoContentType(ct, ab) ?? "video/mp4";
+    const sniffed = sniffVideoContentType(ct, ab);
     return new NextResponse(ab, {
       status: 200,
       headers: {
-        "content-type": sniffed,
+        "content-type": sniffed ?? ct ?? "video/mp4",
         "cache-control": "no-store",
       },
     });

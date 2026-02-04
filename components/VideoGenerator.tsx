@@ -118,14 +118,15 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
       }
 
       const blob = await res.blob();
-      const hinted =
-        ct.startsWith("video/") ? ct.split(";")[0].trim() :
-        ct.includes("application/octet-stream") ? "video/mp4" :
-        blob.type && blob.type.startsWith("video/") ? blob.type :
-        null;
+      const declared =
+        (ct.startsWith("video/") ? ct.split(";")[0].trim() : "") ||
+        (blob.type && blob.type.startsWith("video/") ? blob.type : "");
 
-      const sniffed = hinted ?? (await sniffBlobVideoType(blob));
-      if (!sniffed) {
+      // Always validate by sniffing bytes; don't trust content-type alone.
+      const sniffed = await sniffBlobVideoType(blob);
+      const effectiveType = sniffed || declared;
+
+      if (!effectiveType) {
         const snippet = await blob.slice(0, 400).text().catch(() => "");
         throw new Error(
           snippet
@@ -134,7 +135,26 @@ export default function VideoGenerator({ doodleRef, fallbackPngUrl }: Props) {
         );
       }
 
-      const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
+      // If declared video/mp4/webm but sniff fails, it's likely not a real video.
+      if (declared === "video/mp4" && sniffed !== "video/mp4") {
+        const snippet = await blob.slice(0, 400).text().catch(() => "");
+        throw new Error(
+          snippet
+            ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
+            : "fǎnhuí bùshì shìpín（返回不是视频）",
+        );
+      }
+      if (declared === "video/webm" && sniffed !== "video/webm") {
+        const snippet = await blob.slice(0, 400).text().catch(() => "");
+        throw new Error(
+          snippet
+            ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
+            : "fǎnhuí bùshì shìpín（返回不是视频）",
+        );
+      }
+
+      const video =
+        blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: effectiveType });
       setVideoBlob(video);
       setStatus(`${py("wán chéng")}!（完成!）`);
     } catch (e) {
