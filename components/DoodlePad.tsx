@@ -212,24 +212,46 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
     const canvas = canvasRef.current;
     if (!stage || !canvas) return;
 
-    const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
-    const resize = () => {
-      const { width, height } = canvasSizeForStage(stage, dpr);
-      if (canvas.width === width && canvas.height === height) return;
-      const prev = document.createElement("canvas");
-      prev.width = canvas.width || width;
-      prev.height = canvas.height || height;
-      const pctx = prev.getContext("2d");
-      if (pctx) pctx.drawImage(canvas, 0, 0);
-
-      canvas.width = width;
-      canvas.height = height;
+    const ensureCtx = () => {
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) return null;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(prev, 0, 0, width, height);
+      return ctx;
+    };
+
+    const resize = () => {
+      // IMPORTANT: avoid progressive blur by NEVER resampling the existing bitmap.
+      // Only grow the internal canvas when necessary (e.g. first render / fullscreen / rotation).
+      const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+      const { width: needW, height: needH } = canvasSizeForStage(stage, dpr);
+
+      // Init
+      if (!canvas.width || !canvas.height) {
+        canvas.width = needW;
+        canvas.height = needH;
+        ensureCtx();
+        return;
+      }
+
+      // Only expand; never shrink (shrinking would force resampling and blur).
+      const nextW = Math.max(canvas.width, needW);
+      const nextH = Math.max(canvas.height, needH);
+      if (nextW === canvas.width && nextH === canvas.height) return;
+
+      const prev = document.createElement("canvas");
+      prev.width = canvas.width;
+      prev.height = canvas.height;
+      const pctx = prev.getContext("2d");
+      if (pctx) pctx.drawImage(canvas, 0, 0);
+
+      canvas.width = nextW;
+      canvas.height = nextH;
+      const ctx = ensureCtx();
+      if (!ctx) return;
+      // Copy pixels 1:1 to keep strokes crisp (no scaling).
+      ctx.drawImage(prev, 0, 0);
     };
 
     resize();
