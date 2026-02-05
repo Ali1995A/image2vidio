@@ -176,13 +176,26 @@ export default function VideoGenerator({ doodleRef }: Props) {
         // If server returns pending json but with 200, handle it (defensive).
         try {
           const j = JSON.parse(text) as any;
-          const tid = typeof j?.tid === "string" ? j.tid : "";
-          const pending = Boolean(j?.pending) || /still being generated/i.test(String(j?.error?.message || j?.message || ""));
-          if (pending && tid) {
-            await tryHandlePending(tid);
-            return;
+          const pending =
+            Boolean(j?.pending) ||
+            /still being generated/i.test(String(j?.error?.message || j?.message || ""));
+          if (pending) {
+            const tid =
+              (typeof j?.tid === "string" && j.tid) ||
+              extractTidFromText(String(j?.error?.message || j?.message || "")) ||
+              extractTidFromText(text);
+            if (tid) {
+              await tryHandlePending(tid);
+              return;
+            }
           }
         } catch {}
+
+        const tid = extractTidFromText(text);
+        if (tid) {
+          await tryHandlePending(tid);
+          return;
+        }
         throw new Error(text || "fǎnhuí bùshì shìpín（返回不是视频）");
       }
 
