@@ -12,19 +12,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function isPendingMessage(text: string) {
-  const s = String(text || "").toLowerCase();
-  return (
-    s.includes("still being generated") ||
-    s.includes("being generated") ||
-    s.includes("generating") ||
-    s.includes("processing") ||
-    s.includes("queued") ||
-    s.includes("running") ||
-    s.includes("pending")
-  );
-}
-
 async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
   const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
   if (head.length >= 12) {
@@ -45,16 +32,6 @@ async function blobToDataUrl(blob: Blob) {
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   const base64 = btoa(binary);
   return `data:${blob.type || "application/octet-stream"};base64,${base64}`;
-}
-
-function extractTidFromText(text: string) {
-  const s = String(text || "");
-  const m =
-    /tid:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
-    /"tid"\s*:\s*"([A-Za-z0-9_-]+)"/i.exec(s) ??
-    /"tid"\s*:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
-    /\btid=([A-Za-z0-9_-]+)/i.exec(s);
-  return m ? m[1] : "";
 }
 
 function pickStatusValue(json: unknown): string | null {
@@ -199,12 +176,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
                     // no-op
                   }
                 } else if (!st.ok) {
-                  const t = await st.text();
-                  const tidFromErr = extractTidFromText(t);
-                  // If it still references a tid, treat as pending and keep waiting.
-                  if (!tidFromErr) {
-                    // Don't fail fast on status endpoint; content polling is the source of truth.
-                  }
+                  // Don't fail fast on status endpoint; content polling is the source of truth.
                 }
               }
             } catch {
@@ -224,15 +196,17 @@ export default function VideoGenerator({ doodleRef }: Props) {
           if (poll.status === 202) continue;
           if (!poll.ok) {
             const t = await poll.text();
-            // Only treat as pending if message explicitly looks pending.
-            if (isPendingMessage(t)) continue;
             throw new Error(t || `HTTP ${poll.status}`);
           }
 
           const pollCt = (poll.headers.get("content-type") || "").toLowerCase();
-          if (pollCt.includes("application/json") || pollCt.startsWith("text/")) {
+          if (pollCt.includes("application/json")) {
+            const j = await poll.json().catch(() => null);
+            if (j?.pending) continue;
+            throw new Error(JSON.stringify(j || { error: "json returned from content endpoint" }));
+          }
+          if (pollCt.startsWith("text/")) {
             const t = await poll.text();
-            if (isPendingMessage(t)) continue;
             throw new Error(t || "fǎnhuí bùshì shìpín（返回不是视频）");
           }
 
@@ -240,7 +214,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
           const sniffed = await sniffBlobVideoType(blob);
           if (!sniffed) {
             const snippet = await blob.slice(0, 400).text().catch(() => "");
-            if (isPendingMessage(snippet)) continue;
             throw new Error(
               snippet
                 ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
@@ -263,43 +236,26 @@ export default function VideoGenerator({ doodleRef }: Props) {
           await tryHandlePending(tid);
           return;
         }
+        throw new Error(JSON.stringify(json || { error: "pending without tid" }));
       }
 
       if (!res.ok) {
         const text = await res.text();
-        const tid = extractTidFromText(text);
-        if (tid && isPendingMessage(text)) {
-          await tryHandlePending(tid);
-          return;
-        }
         throw new Error(text || `HTTP ${res.status}`);
       }
 
       const ct = (res.headers.get("content-type") || "").toLowerCase();
       if (ct.includes("application/json")) {
         const text = await res.text();
-        // If server returns pending json but with 200, handle it (defensive).
+        // If server returns pending json with 200, handle it (defensive).
         try {
           const j = JSON.parse(text) as any;
-          const pending =
-            Boolean(j?.pending) ||
-            /still being generated/i.test(String(j?.error?.message || j?.message || ""));
-          if (pending) {
-            const tid =
-              (typeof j?.tid === "string" && j.tid) ||
-              extractTidFromText(String(j?.error?.message || j?.message || "")) ||
-              extractTidFromText(text);
-            if (tid) {
-              await tryHandlePending(tid);
-              return;
-            }
+          if (j?.pending && typeof j?.tid === "string" && j.tid) {
+            await tryHandlePending(j.tid);
+            return;
           }
-        } catch {}
-
-        const tid = extractTidFromText(text);
-        if (tid && isPendingMessage(text)) {
-          await tryHandlePending(tid);
-          return;
+        } catch {
+          // ignore
         }
         throw new Error(text || "fǎnhuí bùshì shìpín（返回不是视频）");
       }

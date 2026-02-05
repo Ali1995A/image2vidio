@@ -49,48 +49,54 @@ function arrayBufferToTextSnippet(buf: ArrayBuffer, maxChars: number) {
   }
 }
 
-function parsePendingTidFromText(text: string): PendingResult | null {
-  const s = String(text || "");
-  if (!isPendingMessage(s)) return null;
-  // Examples:
-  // - "video is still being generated (tid: 2026...)"
-  // - {"tid":"2026..."} or {"tid":2026...}
-  const m =
-    /tid:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
-    /"tid"\s*:\s*"([A-Za-z0-9_-]+)"/i.exec(s) ??
-    /"tid"\s*:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
-    /\btid=([A-Za-z0-9_-]+)/i.exec(s);
-  if (!m) return null;
-  return { pending: true, tid: m[1], message: s.slice(0, 200) };
+function pickJobId(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const anyJson = json as Record<string, any>;
+  const direct = anyJson.id ?? anyJson.video_id ?? anyJson.videoId ?? anyJson.tid ?? anyJson.task_id;
+  if (typeof direct === "string" && direct) return direct;
+  if (typeof direct === "number" && Number.isFinite(direct)) return String(direct);
+
+  const data = anyJson.data;
+  if (data && typeof data === "object") {
+    const d = data as any;
+    const id = d.id ?? d.video_id ?? d.videoId ?? d.tid ?? d.task_id;
+    if (typeof id === "string" && id) return id;
+    if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  }
+
+  return null;
 }
 
-function parsePendingTidFromJson(json: unknown): PendingResult | null {
+function pickStatus(json: unknown): string | null {
   if (!json) return null;
-
-  if (typeof json === "string") return parsePendingTidFromText(json);
   if (typeof json !== "object") return null;
-
   const anyJson = json as Record<string, any>;
-  const candidates = [
-    anyJson?.error?.message,
-    anyJson?.message,
-    anyJson?.error,
-    anyJson?.detail,
-    anyJson?.raw,
-  ];
-
-  for (const c of candidates) {
-    if (typeof c !== "string") continue;
-    const pending = parsePendingTidFromText(c);
-    if (pending) return pending;
+  const direct = anyJson.status ?? anyJson.state;
+  if (typeof direct === "string" && direct) return direct;
+  const data = anyJson.data;
+  if (data && typeof data === "object") {
+    const st = (data as any).status ?? (data as any).state;
+    if (typeof st === "string" && st) return st;
   }
+  return null;
+}
 
-  try {
-    const s = JSON.stringify(json);
-    return parsePendingTidFromText(s.slice(0, 2000));
-  } catch {
-    return null;
-  }
+function isTerminalSuccessStatus(status: string) {
+  const s = status.trim().toLowerCase();
+  return ["succeeded", "success", "completed", "complete", "done", "finished"].includes(s);
+}
+
+function isTerminalFailureStatus(status: string) {
+  const s = status.trim().toLowerCase();
+  return ["failed", "fail", "error", "canceled", "cancelled", "rejected"].includes(s);
+}
+
+function parsePendingFromJson(json: unknown): PendingResult | null {
+  const jobId = pickJobId(json);
+  if (!jobId) return null;
+  const st = pickStatus(json);
+  if (st && (isTerminalSuccessStatus(st) || isTerminalFailureStatus(st))) return null;
+  return { pending: true, tid: jobId };
 }
 
 function pickId(json: unknown): string | null {
@@ -154,6 +160,24 @@ async function fetchVideoStatus(params: {
   });
 }
 
+function pickUrlDeep(json: unknown): string | null {
+  const direct = pickUrl(json);
+  if (direct) return direct;
+  if (!json || typeof json !== "object") return null;
+  const anyJson = json as Record<string, any>;
+  const data = anyJson.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const url =
+      (data as any).url ??
+      (data as any).content_url ??
+      (data as any).contentUrl ??
+      (data as any).video_url ??
+      (data as any).videoUrl;
+    if (typeof url === "string" && url) return url;
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -199,12 +223,12 @@ export async function POST(req: Request) {
       })();
 
       if (!statusRes.ok) {
-        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+        const pending = parsePendingFromJson(maybeJson);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || `Status fetch failed (${statusRes.status})`, { status: 502 });
       }
 
-      const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+      const pending = parsePendingFromJson(maybeJson);
       if (pending) return NextResponse.json(pending, { status: 202 });
 
       if (maybeJson) {
@@ -237,8 +261,32 @@ export async function POST(req: Request) {
               }
             })()
           : null;
-        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+        const pending = parsePendingFromJson(maybeJson);
         if (pending) return NextResponse.json(pending, { status: 202 });
+
+        // Fallback: some providers expose a signed URL on status endpoint instead of /content.
+        // If /content returns an aihubmix error JSON, try status → url → fetch.
+        if (maybeJson && typeof maybeJson === "object") {
+          const stRes = await fetchVideoStatus({ baseUrl, apiKey, tid });
+          if (stRes.ok) {
+            const stJson = await stRes.json().catch(() => null);
+            const u = pickUrlDeep(stJson);
+            if (u) {
+              const videoRes = await fetch(u, { headers: { Authorization: `Bearer ${apiKey}` } });
+              if (videoRes.ok) {
+                const vct = videoRes.headers.get("content-type") || "";
+                const ab = await videoRes.arrayBuffer();
+                const sniffed = sniffVideoContentType(vct, ab);
+                if (sniffed) {
+                  return new NextResponse(ab, {
+                    status: 200,
+                    headers: { "content-type": sniffed, "cache-control": "no-store" },
+                  });
+                }
+              }
+            }
+          }
+        }
         return new NextResponse(text || `Content fetch failed (${contentRes.status})`, { status: 502 });
       }
 
@@ -252,7 +300,7 @@ export async function POST(req: Request) {
             return null;
           }
         })();
-        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+        const pending = parsePendingFromJson(maybeJson);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || "Upstream returned json, not video", { status: 502 });
       }
@@ -261,8 +309,10 @@ export async function POST(req: Request) {
       const sniffed = sniffVideoContentType(ct, ab);
       if (!sniffed) {
         const snippet = arrayBufferToTextSnippet(ab, 800);
-        const pending = parsePendingTidFromText(snippet);
-        if (pending) return NextResponse.json(pending, { status: 202 });
+        if (isPendingMessage(snippet)) {
+          // We don't have a safe job id; ask client to keep polling with the same tid.
+          return NextResponse.json({ pending: true, tid }, { status: 202 });
+        }
         return NextResponse.json(
           {
             error: "Content response is not a known video container",
@@ -290,22 +340,54 @@ export async function POST(req: Request) {
       prompt ||
       "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    const pngBlob = await dataUrlToBlob(imageDataUrl);
-    const form = new FormData();
-    form.set("model", "wan2.2-i2v-plus");
-    form.set("seconds", secondsStr);
-    // 480P (landscape) output.
-    form.set("size", "832x480");
-    form.set("prompt", safePrompt);
-    form.set("input_reference", pngBlob, "doodle.png");
+    // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).
+    // Keep a multipart fallback in case some upstream nodes require file upload.
+    const jsonPayload = {
+      model: "wan2.2-i2v-plus",
+      seconds: Number(secondsStr),
+      size: "832x480",
+      prompt: safePrompt,
+      // Pass through the data URL; upstream may accept base64 or data URL.
+      input_reference: imageDataUrl,
+    };
 
-    const genRes = await fetch(`${baseUrl}/videos`, {
+    let genRes = await fetch(`${baseUrl}/videos`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
       },
-      body: form,
+      body: JSON.stringify(jsonPayload),
     });
+
+    // Fallback to multipart if upstream complains about JSON shape.
+    if (!genRes.ok) {
+      const peekCt = (genRes.headers.get("content-type") || "").toLowerCase();
+      const peekText = await genRes.clone().text().catch(() => "");
+      const shouldTryMultipart =
+        peekCt.includes("application/json") &&
+        (peekText.toLowerCase().includes("missing") ||
+          peekText.toLowerCase().includes("invalid") ||
+          peekText.toLowerCase().includes("parse json"));
+
+      if (shouldTryMultipart) {
+        const pngBlob = await dataUrlToBlob(imageDataUrl);
+        const form = new FormData();
+        form.set("model", "wan2.2-i2v-plus");
+        form.set("seconds", secondsStr);
+        form.set("size", "832x480");
+        form.set("prompt", safePrompt);
+        form.set("input_reference", pngBlob, "doodle.png");
+
+        genRes = await fetch(`${baseUrl}/videos`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: form,
+        });
+      }
+    }
 
     const genContentType = genRes.headers.get("content-type") || "";
     if (!genRes.ok) {
@@ -318,7 +400,7 @@ export async function POST(req: Request) {
         }
       })();
 
-      const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+      const pending = parsePendingFromJson(maybeJson);
       if (pending) return NextResponse.json(pending, { status: 202 });
 
       return new NextResponse(text || `Upstream error (${genRes.status})`, { status: 502 });
@@ -355,7 +437,7 @@ export async function POST(req: Request) {
     }
 
     const genJson = await genRes.json().catch(async () => ({ raw: await genRes.text() }));
-    const pendingFromOkJson = parsePendingTidFromJson(genJson);
+    const pendingFromOkJson = parsePendingFromJson(genJson);
     if (pendingFromOkJson) return NextResponse.json(pendingFromOkJson, { status: 202 });
     const directUrl = pickUrl(genJson);
     if (directUrl) {
@@ -388,7 +470,14 @@ export async function POST(req: Request) {
     const contentRes = await fetchVideoContent({ baseUrl, apiKey, tid: id });
     if (!contentRes.ok) {
       const t = await contentRes.text();
-      const pending = parsePendingTidFromText(t);
+      const maybeJson = (() => {
+        try {
+          return JSON.parse(t) as unknown;
+        } catch {
+          return null;
+        }
+      })();
+      const pending = parsePendingFromJson(maybeJson);
       if (pending) return NextResponse.json(pending, { status: 202 });
       return new NextResponse(t || `Content fetch failed (${contentRes.status})`, { status: 502 });
     }
