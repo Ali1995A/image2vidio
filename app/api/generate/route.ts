@@ -194,7 +194,12 @@ async function captionDoodle(params: {
           {
             type: "text",
             text:
-              "Describe this child's doodle in one short sentence. Focus on main subject and simple colors. No extra commentary.",
+              "You are describing a child's doodle for an animation prompt.\n" +
+              "Return EXACTLY 3 lines (no markdown):\n" +
+              "SUBJECT=...\n" +
+              "COLORS=... (list 3-6 simple color words)\n" +
+              "COMPOSITION=... (where the subject is placed, scale, empty space)\n" +
+              "Keep it short and concrete.",
           },
           {
             type: "image_url",
@@ -458,7 +463,16 @@ export async function POST(req: Request) {
 
     if (isSmart) {
       const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
-      finalPrompt = `${safePrompt}. Based on this doodle: ${caption}. Cute anime style, simple background, smooth motion.`;
+      finalPrompt =
+        `${safePrompt}\n` +
+        `Doodle notes:\n${caption}\n` +
+        `Hard rules:\n` +
+        `- single main subject, simple shapes, clear silhouette\n` +
+        `- preserve doodle color palette and composition (position/scale/empty space)\n` +
+        `- background should support the doodle theme, minimal and not distracting\n` +
+        `- camera: static or very gentle pan; motion: subtle (blink/breathe/sway)\n` +
+        `Negative:\n` +
+        `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style`;
     }
 
     // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).

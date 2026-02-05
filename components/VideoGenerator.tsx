@@ -70,7 +70,13 @@ function isTerminalFailure(status: string) {
 
 export default function VideoGenerator({ doodleRef }: Props) {
   const seconds = 5;
-  const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
+  const prompt =
+    "绘本/蜡笔质感的动漫风（storybook illustration, crayon/marker texture, clean outline, cute, kid-friendly）。" +
+    "根据涂鸦内容生成简笔画风的单一主体：人物或拟人动物（轮廓清晰，形体简单）。" +
+    "色彩与构图尽量遵循涂鸦：主体位置/比例/留白关系保持一致，主色调贴近涂鸦，不要引入新的主导色。" +
+    "背景自动匹配涂鸦主题：加入轻量的动漫背景或小道具辅助原始内容（柔和、简洁、不喧宾夺主）。" +
+    "镜头与动作：固定机位或极轻微平移，轻微动作（眨眼/呼吸/轻轻摆动），避免复杂运镜与快速动作。" +
+    "画面干净、边缘清晰、无噪点、无闪烁、无文字/水印。";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
