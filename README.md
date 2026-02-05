@@ -26,4 +26,4 @@ npm run dev
   - `AIHUBMIX_API_KEY`（必填）
   - `AIHUBMIX_BASE_URL`（可选，默认 `https://aihubmix.com/v1`）
 
-右侧 “gāojí 高级” 里也可临时输入 `API Key`（不推荐长期使用）。
+右侧不提供手动输入 `API Key` 的功能（统一使用环境变量）。

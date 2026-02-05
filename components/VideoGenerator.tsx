@@ -1,15 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { DoodlePadHandle } from "./DoodlePad";
 import { py } from "../lib/pinyin";
 
 type Props = {
   doodleRef: React.RefObject<DoodlePadHandle | null>;
 };
-
-const LS_KEY = "image2vidio.apiKey";
-const LS_BASE = "image2vidio.baseUrl";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -48,13 +45,8 @@ function extractTidFromText(text: string) {
 }
 
 export default function VideoGenerator({ doodleRef }: Props) {
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("https://aihubmix.com/v1");
   const [seconds, setSeconds] = useState(2);
-  const [prompt, setPrompt] = useState(
-    "anime style, cute, colorful, clean lines, soft lighting, smooth motion",
-  );
-  const [isAdvanced, setIsAdvanced] = useState(false);
+  const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
@@ -62,21 +54,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
   const runIdRef = useRef(0);
 
   const urlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const k = window.localStorage.getItem(LS_KEY);
-    if (k) setApiKey(k);
-    const b = window.localStorage.getItem(LS_BASE);
-    if (b) setBaseUrl(b);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(LS_KEY, apiKey);
-  }, [apiKey]);
-
-  useEffect(() => {
-    window.localStorage.setItem(LS_BASE, baseUrl);
-  }, [baseUrl]);
 
   const videoUrl = useMemo(() => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -111,8 +88,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          apiKey,
-          baseUrl,
           seconds: sec,
           prompt,
           imageDataUrl: pngDataUrl,
@@ -133,8 +108,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
             body: JSON.stringify({
               action: "content",
               tid: pendingTid,
-              apiKey,
-              baseUrl,
             }),
           });
 
@@ -286,14 +259,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
           >
             <span className="pinyin-text">{py("kāi shǐ")}</span> 开始
           </button>
-          <button
-            type="button"
-            className={`btn ${isAdvanced ? "btnOn" : ""}`}
-            onClick={() => setIsAdvanced((v) => !v)}
-            disabled={isBusy}
-          >
-            <span className="pinyin-text">{py("gāo jí")}</span> 高级
-          </button>
           <button type="button" className="btn" onClick={onDownload} disabled={!videoBlob}>
             <span className="pinyin-text">{py("xià zǎi")}</span> 下载
           </button>
@@ -319,50 +284,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
             />
           </div>
         </div>
-
-        {isAdvanced ? (
-          <>
-            <div className="row">
-              <div className="label">
-                <span className="pinyin-text">{py("yào shí")}</span> 钥匙 · API Key
-              </div>
-              <input
-                className="input"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={`${py("kě bù tián")}（可不填：yòng Vercel 环境变量）`}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-            </div>
-            <div className="row">
-              <div className="label">
-                <span className="pinyin-text">{py("dì zhǐ")}</span> 地址 · Base URL
-              </div>
-              <input
-                className="input"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://aihubmix.com/v1"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-            </div>
-            <div className="row">
-              <div className="label">
-                <span className="pinyin-text">{py("tí shì")}</span> 提示 · Prompt
-              </div>
-              <input
-                className="input"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="anime style..."
-              />
-            </div>
-          </>
-        ) : null}
 
         {status ? <div className="hint">{status}</div> : null}
         {error ? (
