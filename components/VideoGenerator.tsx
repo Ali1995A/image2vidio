@@ -241,6 +241,15 @@ export default function VideoGenerator({ doodleRef }: Props) {
       }
 
       if (!res.ok) {
+        const ct = (res.headers.get("content-type") || "").toLowerCase();
+        if (ct.includes("application/json")) {
+          const j = await res.json().catch(() => null);
+          if (j?.pending && typeof j?.tid === "string" && j.tid) {
+            await tryHandlePending(j.tid);
+            return;
+          }
+          throw new Error(JSON.stringify(j || { error: `HTTP ${res.status}` }));
+        }
         const text = await res.text();
         throw new Error(text || `HTTP ${res.status}`);
       }

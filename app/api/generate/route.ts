@@ -17,6 +17,20 @@ function isPendingMessage(text: string) {
   );
 }
 
+function parsePendingTidFromText(text: string): PendingResult | null {
+  const s = String(text || "");
+  if (!isPendingMessage(s)) return null;
+
+  // Avoid treating unrelated "tid" (e.g. token failure) as pending.
+  const sLower = s.toLowerCase();
+  if (sLower.includes("token") || sLower.includes("获取token")) return null;
+
+  // aihubmix often returns: "video is still being generated (tid: 2026...)"
+  const m = /tid:\s*([0-9]{10,})/i.exec(s) ?? /\btid=([0-9]{10,})/i.exec(s);
+  if (!m) return null;
+  return { pending: true, tid: m[1], message: s.slice(0, 200) };
+}
+
 function sniffVideoContentType(contentType: string, buf: ArrayBuffer): string | null {
   const ct = (contentType || "").split(";")[0]?.trim().toLowerCase();
   if (ct.startsWith("video/")) return ct;
@@ -97,6 +111,30 @@ function parsePendingFromJson(json: unknown): PendingResult | null {
   const st = pickStatus(json);
   if (st && (isTerminalSuccessStatus(st) || isTerminalFailureStatus(st))) return null;
   return { pending: true, tid: jobId };
+}
+
+function parsePendingFromAny(jsonOrText: unknown): PendingResult | null {
+  if (!jsonOrText) return null;
+  if (typeof jsonOrText === "string") return parsePendingTidFromText(jsonOrText);
+  if (typeof jsonOrText !== "object") return null;
+
+  const pendingFromJson = parsePendingFromJson(jsonOrText);
+  if (pendingFromJson) return pendingFromJson;
+
+  const anyJson = jsonOrText as Record<string, any>;
+  const candidates = [
+    anyJson?.error?.message,
+    anyJson?.message,
+    anyJson?.detail,
+    anyJson?.error,
+    anyJson?.raw,
+  ];
+  for (const c of candidates) {
+    if (typeof c !== "string") continue;
+    const pending = parsePendingTidFromText(c);
+    if (pending) return pending;
+  }
+  return null;
 }
 
 function pickId(json: unknown): string | null {
@@ -224,12 +262,12 @@ export async function POST(req: Request) {
       })();
 
       if (!statusRes.ok) {
-        const pending = parsePendingFromJson(maybeJson);
+        const pending = parsePendingFromAny(maybeJson ?? text);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || `Status fetch failed (${statusRes.status})`, { status: 502 });
       }
 
-      const pending = parsePendingFromJson(maybeJson);
+      const pending = parsePendingFromAny(maybeJson ?? text);
       if (pending) return NextResponse.json(pending, { status: 202 });
 
       if (maybeJson) {
@@ -262,7 +300,7 @@ export async function POST(req: Request) {
               }
             })()
           : null;
-        const pending = parsePendingFromJson(maybeJson);
+        const pending = parsePendingFromAny(maybeJson ?? text);
         if (pending) return NextResponse.json(pending, { status: 202 });
 
         // Fallback: some providers expose a signed URL on status endpoint instead of /content.
@@ -301,7 +339,7 @@ export async function POST(req: Request) {
             return null;
           }
         })();
-        const pending = parsePendingFromJson(maybeJson);
+        const pending = parsePendingFromAny(maybeJson ?? text);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || "Upstream returned json, not video", { status: 502 });
       }
@@ -310,10 +348,8 @@ export async function POST(req: Request) {
       const sniffed = sniffVideoContentType(ct, ab);
       if (!sniffed) {
         const snippet = arrayBufferToTextSnippet(ab, 800);
-        if (isPendingMessage(snippet)) {
-          // We don't have a safe job id; ask client to keep polling with the same tid.
-          return NextResponse.json({ pending: true, tid }, { status: 202 });
-        }
+        const pending = parsePendingTidFromText(snippet);
+        if (pending) return NextResponse.json(pending, { status: 202 });
         return NextResponse.json(
           {
             error: "Content response is not a known video container",
@@ -400,7 +436,7 @@ export async function POST(req: Request) {
         }
       })();
 
-      const pending = parsePendingFromJson(maybeJson);
+      const pending = parsePendingFromAny(maybeJson ?? text);
       if (pending) return NextResponse.json(pending, { status: 202 });
 
       return new NextResponse(text || `Upstream error (${genRes.status})`, { status: 502 });
@@ -437,7 +473,7 @@ export async function POST(req: Request) {
     }
 
     const genJson = await genRes.json().catch(async () => ({ raw: await genRes.text() }));
-    const pendingFromOkJson = parsePendingFromJson(genJson);
+    const pendingFromOkJson = parsePendingFromAny(genJson);
     if (pendingFromOkJson) return NextResponse.json(pendingFromOkJson, { status: 202 });
     const directUrl = pickUrl(genJson);
     if (directUrl) {
@@ -477,7 +513,7 @@ export async function POST(req: Request) {
           return null;
         }
       })();
-      const pending = parsePendingFromJson(maybeJson);
+      const pending = parsePendingFromAny(maybeJson ?? t);
       if (pending) return NextResponse.json(pending, { status: 202 });
       return new NextResponse(t || `Content fetch failed (${contentRes.status})`, { status: 502 });
     }
