@@ -121,10 +121,20 @@ export default function VideoGenerator({ doodleRef }: Props) {
             throw new Error(t || `HTTP ${poll.status}`);
           }
 
+          const pollCt = (poll.headers.get("content-type") || "").toLowerCase();
+          if (pollCt.includes("application/json") || pollCt.startsWith("text/")) {
+            const t = await poll.text();
+            const tidFromOkText = extractTidFromText(t);
+            if (tidFromOkText) continue;
+            throw new Error(t || "fǎnhuí bùshì shìpín（返回不是视频）");
+          }
+
           const blob = await poll.blob();
           const sniffed = await sniffBlobVideoType(blob);
           if (!sniffed) {
             const snippet = await blob.slice(0, 400).text().catch(() => "");
+            const tidFromSnippet = extractTidFromText(snippet);
+            if (tidFromSnippet) continue;
             throw new Error(
               snippet
                 ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
