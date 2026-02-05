@@ -205,6 +205,8 @@ export async function POST(req: Request) {
     const form = new FormData();
     form.set("model", "wan2.2-i2v-plus");
     form.set("duration", String(duration));
+    // 480P (landscape) output.
+    form.set("size", "832x480");
     if (prompt) form.set("prompt", prompt);
     form.set("input_reference", pngBlob, "doodle.png");
 
