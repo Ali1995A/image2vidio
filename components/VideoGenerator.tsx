@@ -12,6 +12,19 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function isPendingMessage(text: string) {
+  const s = String(text || "").toLowerCase();
+  return (
+    s.includes("still being generated") ||
+    s.includes("being generated") ||
+    s.includes("generating") ||
+    s.includes("processing") ||
+    s.includes("queued") ||
+    s.includes("running") ||
+    s.includes("pending")
+  );
+}
+
 async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
   const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
   if (head.length >= 12) {
@@ -37,10 +50,10 @@ async function blobToDataUrl(blob: Blob) {
 function extractTidFromText(text: string) {
   const s = String(text || "");
   const m =
-    /tid:\s*([0-9]+)/i.exec(s) ??
-    /"tid"\s*:\s*"([0-9]+)"/i.exec(s) ??
-    /"tid"\s*:\s*([0-9]+)/i.exec(s) ??
-    /\btid=([0-9]+)/i.exec(s);
+    /tid:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
+    /"tid"\s*:\s*"([A-Za-z0-9_-]+)"/i.exec(s) ??
+    /"tid"\s*:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
+    /\btid=([A-Za-z0-9_-]+)/i.exec(s);
   return m ? m[1] : "";
 }
 
@@ -79,7 +92,7 @@ function isTerminalFailure(status: string) {
 }
 
 export default function VideoGenerator({ doodleRef }: Props) {
-  const [seconds, setSeconds] = useState(1);
+  const seconds = 5;
   const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +120,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
-    const sec = clamp(seconds, 1, 3);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
@@ -122,13 +134,14 @@ export default function VideoGenerator({ doodleRef }: Props) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          seconds: sec,
+          seconds,
           prompt,
           imageDataUrl: pngDataUrl,
         }),
       });
 
       const tryHandlePending = async (pendingTid: string) => {
+        const maxTotalMs = 8 * 60 * 1000; // 8 minutes
         const cycleMs = 2_160_000;
         const totalStarted = Date.now();
         let cycleStarted = totalStarted;
@@ -137,6 +150,12 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
         while (true) {
           if (runIdRef.current !== runId) return; // superseded
+          if (Date.now() - totalStarted > maxTotalMs) {
+            setError(`${py("chāo shí")}（超时）：tid ${pendingTid}`);
+            setStatus("");
+            setIsBusy(false);
+            return;
+          }
           const totalElapsed = Math.round((Date.now() - totalStarted) / 1000);
           const cycleElapsed = Math.round((Date.now() - cycleStarted) / 1000);
           setStatus(
@@ -205,18 +224,15 @@ export default function VideoGenerator({ doodleRef }: Props) {
           if (poll.status === 202) continue;
           if (!poll.ok) {
             const t = await poll.text();
-            // Sometimes upstream (or our API) may respond with an error JSON/text that still contains the tid.
-            // Treat it as "still generating" and keep waiting instead of failing fast.
-            const tidFromErr = extractTidFromText(t);
-            if (tidFromErr) continue;
+            // Only treat as pending if message explicitly looks pending.
+            if (isPendingMessage(t)) continue;
             throw new Error(t || `HTTP ${poll.status}`);
           }
 
           const pollCt = (poll.headers.get("content-type") || "").toLowerCase();
           if (pollCt.includes("application/json") || pollCt.startsWith("text/")) {
             const t = await poll.text();
-            const tidFromOkText = extractTidFromText(t);
-            if (tidFromOkText) continue;
+            if (isPendingMessage(t)) continue;
             throw new Error(t || "fǎnhuí bùshì shìpín（返回不是视频）");
           }
 
@@ -224,8 +240,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
           const sniffed = await sniffBlobVideoType(blob);
           if (!sniffed) {
             const snippet = await blob.slice(0, 400).text().catch(() => "");
-            const tidFromSnippet = extractTidFromText(snippet);
-            if (tidFromSnippet) continue;
+            if (isPendingMessage(snippet)) continue;
             throw new Error(
               snippet
                 ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
@@ -253,7 +268,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
       if (!res.ok) {
         const text = await res.text();
         const tid = extractTidFromText(text);
-        if (tid) {
+        if (tid && isPendingMessage(text)) {
           await tryHandlePending(tid);
           return;
         }
@@ -282,7 +297,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
         } catch {}
 
         const tid = extractTidFromText(text);
-        if (tid) {
+        if (tid && isPendingMessage(text)) {
           await tryHandlePending(tid);
           return;
         }
@@ -337,6 +352,12 @@ export default function VideoGenerator({ doodleRef }: Props) {
     }
   };
 
+  const onStop = () => {
+    runIdRef.current++;
+    setIsBusy(false);
+    setStatus("");
+  };
+
   const onDownload = () => {
     if (!videoBlob) return;
     const a = document.createElement("a");
@@ -372,6 +393,9 @@ export default function VideoGenerator({ doodleRef }: Props) {
           >
             <span className="pinyin-text">{py("kāi shǐ")}</span> 开始
           </button>
+          <button type="button" className="btn" onClick={onStop} disabled={!isBusy}>
+            <span className="pinyin-text">{py("tíng zhǐ")}</span> 停止
+          </button>
           <button type="button" className="btn" onClick={onDownload} disabled={!videoBlob}>
             <span className="pinyin-text">{py("xià zǎi")}</span> 下载
           </button>
@@ -383,18 +407,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
           <div className="timeInline" aria-label="video duration">
             <div className="timeInlineLabel">
-              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1, 3)}s
+              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · 5s
             </div>
-            <input
-              className="slider timeInlineSlider"
-              type="range"
-              min={1}
-              max={3}
-              step={0.5}
-              value={seconds}
-              onChange={(e) => setSeconds(Number(e.target.value))}
-              disabled={isBusy}
-            />
+            <div className="hint" style={{ opacity: 0.75 }}>
+              wan2.2-i2v-plus 固定 5s
+            </div>
           </div>
         </div>
 

@@ -6,7 +6,7 @@
 
 目标：在 iPad 横屏（第一代 iPad Pro 作为主优化对象）上，用粉色 iOS 风格 UI：
 - 左侧：涂鸦画板（画笔/橡皮/笔宽/调色板/底色/全屏/加载本地图片）
-- 右侧：把左侧涂鸦作为输入，调用 `wan2.2-i2v-plus` 生成短视频（当前 1–3 秒，可调整）
+- 右侧：把左侧涂鸦作为输入，调用 `wan2.2-i2v-plus` 生成短视频（当前固定 5 秒）
 
 入口页：
 - `app/page.tsx`：左右两栏容器与标题文案（带“拼音+汉字”展示），并把 `doodleRef` 传给右侧生成器组件。
@@ -105,7 +105,7 @@ Vercel 配置路径：
 
 参数：
 - `model=wan2.2-i2v-plus`
-- `duration`：当前 clamp 到 `1–3`（代码里也设置了 `size=832x480` 横屏 480p）
+- `seconds`：固定 `5`（按 aihubmix 文档，wan2.2-i2v-plus 为 5 秒）并设置 `size=832x480` 横屏 480p
 
 ### 4.4 拼音展示与字体
 
@@ -141,8 +141,8 @@ Vercel 配置路径：
 ## 6. 已知约束/注意事项
 
 - 生成时长目前是 `1–3s`（UI 与服务端都 clamp 了）；如果你要恢复到 `3–5s`，需要同时改：
-  - `components/VideoGenerator.tsx` 的滑块范围
-  - `app/api/generate/route.ts` 的 `duration` clamp
+- 生成时长目前是 `5s` 固定（UI 与服务端都固定）；如果要改时长，需要先确认上游模型是否支持其它 `seconds` 值，然后同时改：
+  - `components/VideoGenerator.tsx`
+  - `app/api/generate/route.ts`
 - “全屏”在部分 iOS Safari 上可能受限制：组件有 fallback 的最大化样式（`canvasStageMax`）。
 - 轮询策略偏保守：遇到上游偶发返回 JSON/text 但仍带 `tid` 的情况，会继续等待而不是直接失败。
-

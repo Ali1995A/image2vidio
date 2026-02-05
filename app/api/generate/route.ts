@@ -4,6 +4,19 @@ export const runtime = "nodejs";
 
 type PendingResult = { pending: true; tid: string; message?: string };
 
+function isPendingMessage(text: string) {
+  const s = String(text || "").toLowerCase();
+  return (
+    s.includes("still being generated") ||
+    s.includes("being generated") ||
+    s.includes("generating") ||
+    s.includes("processing") ||
+    s.includes("queued") ||
+    s.includes("running") ||
+    s.includes("pending")
+  );
+}
+
 function sniffVideoContentType(contentType: string, buf: ArrayBuffer): string | null {
   const ct = (contentType || "").split(";")[0]?.trim().toLowerCase();
   if (ct.startsWith("video/")) return ct;
@@ -38,14 +51,15 @@ function arrayBufferToTextSnippet(buf: ArrayBuffer, maxChars: number) {
 
 function parsePendingTidFromText(text: string): PendingResult | null {
   const s = String(text || "");
+  if (!isPendingMessage(s)) return null;
   // Examples:
   // - "video is still being generated (tid: 2026...)"
   // - {"tid":"2026..."} or {"tid":2026...}
   const m =
-    /tid:\s*([0-9]+)/i.exec(s) ??
-    /"tid"\s*:\s*"([0-9]+)"/i.exec(s) ??
-    /"tid"\s*:\s*([0-9]+)/i.exec(s) ??
-    /\btid=([0-9]+)/i.exec(s);
+    /tid:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
+    /"tid"\s*:\s*"([A-Za-z0-9_-]+)"/i.exec(s) ??
+    /"tid"\s*:\s*([A-Za-z0-9_-]+)/i.exec(s) ??
+    /\btid=([A-Za-z0-9_-]+)/i.exec(s);
   if (!m) return null;
   return { pending: true, tid: m[1], message: s.slice(0, 200) };
 }
@@ -149,7 +163,6 @@ export async function POST(req: Request) {
     const baseUrl = String(body?.baseUrl || envBaseUrl || "https://aihubmix.com/v1")
       .trim()
       .replace(/\/$/, "");
-    const seconds = Number(body?.seconds || 2);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
     const action = String(body?.action || "").trim().toLowerCase();
@@ -271,15 +284,19 @@ export async function POST(req: Request) {
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
-    const duration = Math.max(1, Math.min(3, Number.isFinite(seconds) ? seconds : 1));
+    // aihubmix docs: wan2.2-i2v-plus supports seconds=5s (fixed for wan series).
+    const secondsStr = "5";
+    const safePrompt =
+      prompt ||
+      "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
     const pngBlob = await dataUrlToBlob(imageDataUrl);
     const form = new FormData();
     form.set("model", "wan2.2-i2v-plus");
-    form.set("duration", String(duration));
+    form.set("seconds", secondsStr);
     // 480P (landscape) output.
     form.set("size", "832x480");
-    if (prompt) form.set("prompt", prompt);
+    form.set("prompt", safePrompt);
     form.set("input_reference", pngBlob, "doodle.png");
 
     const genRes = await fetch(`${baseUrl}/videos`, {
