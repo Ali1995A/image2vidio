@@ -12,6 +12,12 @@ import { py } from "../lib/pinyin";
 
 export type DoodlePadHandle = {
   exportPngBlob: () => Promise<Blob>;
+  exportReferenceImageBlob: (opts?: {
+    width?: number;
+    height?: number;
+    mimeType?: "image/png" | "image/jpeg";
+    quality?: number;
+  }) => Promise<Blob>;
 };
 
 type Props = {
@@ -100,6 +106,46 @@ async function blobFromCanvas(drawCanvas: HTMLCanvasElement, bgColor: string): P
   ctx.drawImage(drawCanvas, 0, 0);
   const blob = await new Promise<Blob>((resolve, reject) => {
     out.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+  });
+  return blob;
+}
+
+async function blobFromCanvasScaled(params: {
+  drawCanvas: HTMLCanvasElement;
+  bgColor: string;
+  width: number;
+  height: number;
+  mimeType: "image/png" | "image/jpeg";
+  quality?: number;
+}): Promise<Blob> {
+  const { drawCanvas, bgColor, width, height, mimeType, quality } = params;
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.floor(width));
+  out.height = Math.max(1, Math.floor(height));
+
+  const ctx = out.getContext("2d");
+  if (!ctx) throw new Error("Canvas ctx missing");
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  // Fit source into target, keeping aspect ratio (contain).
+  const sw = Math.max(1, drawCanvas.width);
+  const sh = Math.max(1, drawCanvas.height);
+  const scale = Math.min(out.width / sw, out.height / sh);
+  const dw = Math.max(1, Math.floor(sw * scale));
+  const dh = Math.max(1, Math.floor(sh * scale));
+  const dx = Math.floor((out.width - dw) / 2);
+  const dy = Math.floor((out.height - dh) / 2);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(drawCanvas, dx, dy, dw, dh);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    out.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      mimeType,
+      mimeType === "image/jpeg" ? quality ?? 0.92 : undefined,
+    );
   });
   return blob;
 }
@@ -204,6 +250,22 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       const c = canvasRef.current;
       if (!c) throw new Error("canvas missing");
       return blobFromCanvas(c, bgColor);
+    },
+    exportReferenceImageBlob: async (opts) => {
+      const c = canvasRef.current;
+      if (!c) throw new Error("canvas missing");
+      const width = opts?.width ?? 832;
+      const height = opts?.height ?? 480;
+      const mimeType = opts?.mimeType ?? "image/jpeg";
+      const quality = opts?.quality ?? 0.92;
+      return blobFromCanvasScaled({
+        drawCanvas: c,
+        bgColor,
+        width,
+        height,
+        mimeType,
+        quality,
+      });
     },
   }));
 

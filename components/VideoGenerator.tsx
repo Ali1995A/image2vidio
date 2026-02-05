@@ -105,8 +105,14 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setIsBusy(true);
     try {
       setStatus(`${py("shēng chéng zhōng")}…（生成中…）`);
-      const pngBlob = await doodleRef.current.exportPngBlob();
-      const pngDataUrl = await blobToDataUrl(pngBlob);
+      const imgBlob =
+        (await doodleRef.current.exportReferenceImageBlob?.({
+          width: 832,
+          height: 480,
+          mimeType: "image/jpeg",
+          quality: 0.92,
+        })) ?? (await doodleRef.current.exportPngBlob());
+      const pngDataUrl = await blobToDataUrl(imgBlob);
 
       const res = await fetch("/api/generate", {
         method: "POST",
