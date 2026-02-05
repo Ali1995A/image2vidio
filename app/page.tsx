@@ -34,7 +34,7 @@ export default function HomePage() {
               <span className="pinyin-text">{py("dòng màn shì pín")}</span>{" "}
               动漫视频
             </div>
-            <div className="chip">build {APP_VERSION} · wan2.2 i2v · 5s</div>
+            <div className="chip">build {APP_VERSION} · wan2.2 i2v · 1–3s</div>
           </div>
           <VideoGenerator doodleRef={doodleRef} />
         </div>

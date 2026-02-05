@@ -69,7 +69,7 @@ function isTerminalFailure(status: string) {
 }
 
 export default function VideoGenerator({ doodleRef }: Props) {
-  const seconds = 5;
+  const [seconds, setSeconds] = useState(1);
   const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +97,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
+    const sec = clamp(seconds, 1, 3);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
@@ -111,7 +112,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          seconds,
+          seconds: sec,
           prompt,
           imageDataUrl: pngDataUrl,
         }),
@@ -363,11 +364,18 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
           <div className="timeInline" aria-label="video duration">
             <div className="timeInlineLabel">
-              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · 5s
+              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1, 3)}s
             </div>
-            <div className="hint" style={{ opacity: 0.75 }}>
-              wan2.2-i2v-plus 固定 5s
-            </div>
+            <input
+              className="slider timeInlineSlider"
+              type="range"
+              min={1}
+              max={3}
+              step={1}
+              value={seconds}
+              onChange={(e) => setSeconds(Number(e.target.value))}
+              disabled={isBusy}
+            />
           </div>
         </div>
 

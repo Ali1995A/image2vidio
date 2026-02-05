@@ -187,6 +187,7 @@ export async function POST(req: Request) {
     const baseUrl = String(body?.baseUrl || envBaseUrl || "https://aihubmix.com/v1")
       .trim()
       .replace(/\/$/, "");
+    const seconds = Number(body?.seconds ?? 1);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
     const action = String(body?.action || "").trim().toLowerCase();
@@ -334,8 +335,7 @@ export async function POST(req: Request) {
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
-    // aihubmix docs: wan2.2-i2v-plus supports seconds=5s (fixed for wan series).
-    const secondsStr = "5";
+    const secondsClamped = Math.max(1, Math.min(3, Number.isFinite(seconds) ? seconds : 1));
     const safePrompt =
       prompt ||
       "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
@@ -344,7 +344,7 @@ export async function POST(req: Request) {
     // Keep a multipart fallback in case some upstream nodes require file upload.
     const jsonPayload = {
       model: "wan2.2-i2v-plus",
-      seconds: Number(secondsStr),
+      seconds: secondsClamped,
       size: "832x480",
       prompt: safePrompt,
       // Pass through the data URL; upstream may accept base64 or data URL.
@@ -374,7 +374,7 @@ export async function POST(req: Request) {
         const pngBlob = await dataUrlToBlob(imageDataUrl);
         const form = new FormData();
         form.set("model", "wan2.2-i2v-plus");
-        form.set("seconds", secondsStr);
+        form.set("seconds", String(secondsClamped));
         form.set("size", "832x480");
         form.set("prompt", safePrompt);
         form.set("input_reference", pngBlob, "doodle.png");

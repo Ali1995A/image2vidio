@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "image2vidio",
-  description: "Doodle → Anime video (5s)",
+  description: "Doodle → Anime video (1–3s)",
 };
 
 export const viewport: Viewport = {
