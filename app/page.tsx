@@ -15,10 +15,10 @@ export default function HomePage() {
         <div className="panelInner">
           <div className="panelHeader">
             <div className="panelTitle">
-              <span className="pinyin-text">{py("zuǒ biān")}</span> 左边 ·{" "}
+              神笔CC · <span className="pinyin-text">{py("zuǒ biān")}</span> 左边 ·{" "}
               <span className="pinyin-text">{py("tú yā")}</span> 涂鸦
             </div>
-          <div className="chip">build {APP_VERSION} · iPad Pro（Landscape）</div>
+            <div className="chip">build {APP_VERSION} · iPad Pro（Landscape）</div>
           </div>
           <DoodlePad
             ref={doodleRef}

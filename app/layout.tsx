@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "image2vidio",
+  title: "神笔CC",
   description: "Doodle → Anime video (1–3s)",
 };
 
