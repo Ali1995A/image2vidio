@@ -27,3 +27,7 @@ npm run dev
   - `AIHUBMIX_BASE_URL`（可选，默认 `https://aihubmix.com/v1`）
 
 右侧不提供手动输入 `API Key` 的功能（统一使用环境变量）。
+
+## 代码衔接说明
+
+见 `docs/CODEBASE.md`。
