@@ -38,8 +38,14 @@ function arrayBufferToTextSnippet(buf: ArrayBuffer, maxChars: number) {
 
 function parsePendingTidFromText(text: string): PendingResult | null {
   const s = String(text || "");
-  // Example: "video is still being generated (tid: 2026...)"
-  const m = /tid:\s*([0-9]+)/i.exec(s);
+  // Examples:
+  // - "video is still being generated (tid: 2026...)"
+  // - {"tid":"2026..."} or {"tid":2026...}
+  const m =
+    /tid:\s*([0-9]+)/i.exec(s) ??
+    /"tid"\s*:\s*"([0-9]+)"/i.exec(s) ??
+    /"tid"\s*:\s*([0-9]+)/i.exec(s) ??
+    /\btid=([0-9]+)/i.exec(s);
   if (!m) return null;
   return { pending: true, tid: m[1], message: s.slice(0, 200) };
 }
@@ -152,7 +158,16 @@ export async function POST(req: Request) {
       const ctLower = ct.toLowerCase();
       if (!contentRes.ok) {
         const text = await contentRes.text();
-        const pending = parsePendingTidFromText(text);
+        const maybeJson = ctLower.includes("application/json")
+          ? (() => {
+              try {
+                return JSON.parse(text) as unknown;
+              } catch {
+                return null;
+              }
+            })()
+          : null;
+        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
         if (pending) return NextResponse.json(pending, { status: 202 });
         return new NextResponse(text || `Content fetch failed (${contentRes.status})`, { status: 502 });
       }

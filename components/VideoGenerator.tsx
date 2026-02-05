@@ -38,7 +38,12 @@ async function blobToDataUrl(blob: Blob) {
 }
 
 function extractTidFromText(text: string) {
-  const m = /tid:\s*([0-9]+)/i.exec(String(text || ""));
+  const s = String(text || "");
+  const m =
+    /tid:\s*([0-9]+)/i.exec(s) ??
+    /"tid"\s*:\s*"([0-9]+)"/i.exec(s) ??
+    /"tid"\s*:\s*([0-9]+)/i.exec(s) ??
+    /\btid=([0-9]+)/i.exec(s);
   return m ? m[1] : "";
 }
 
