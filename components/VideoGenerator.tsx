@@ -120,7 +120,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
       });
 
       const tryHandlePending = async (pendingTid: string) => {
-        const maxWaitMs = 90_000;
+        const maxWaitMs = 180_000;
         const started = Date.now();
         while (Date.now() - started < maxWaitMs) {
           if (runIdRef.current !== runId) return; // superseded
@@ -141,6 +141,10 @@ export default function VideoGenerator({ doodleRef }: Props) {
           if (poll.status === 202) continue;
           if (!poll.ok) {
             const t = await poll.text();
+            // Sometimes upstream (or our API) may respond with an error JSON/text that still contains the tid.
+            // Treat it as "still generating" and keep waiting instead of failing fast.
+            const tidFromErr = extractTidFromText(t);
+            if (tidFromErr) continue;
             throw new Error(t || `HTTP ${poll.status}`);
           }
 
