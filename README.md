@@ -31,3 +31,7 @@ npm run dev
 ## 代码衔接说明
 
 见 `docs/CODEBASE.md`。
+
+## 随时衔接报告（给 AI/人类快速读）
+
+见 `docs/HANDOFF_REPORT.md`。
