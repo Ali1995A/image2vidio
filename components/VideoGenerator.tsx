@@ -45,7 +45,7 @@ function extractTidFromText(text: string) {
 }
 
 export default function VideoGenerator({ doodleRef }: Props) {
-  const [seconds, setSeconds] = useState(2);
+  const [seconds, setSeconds] = useState(1);
   const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
-    const sec = clamp(seconds, 1.5, 3);
+    const sec = clamp(seconds, 1, 3);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
@@ -293,12 +293,12 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
           <div className="timeInline" aria-label="video duration">
             <div className="timeInlineLabel">
-              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1.5, 3)}s
+              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1, 3)}s
             </div>
             <input
               className="slider timeInlineSlider"
               type="range"
-              min={1.5}
+              min={1}
               max={3}
               step={0.5}
               value={seconds}

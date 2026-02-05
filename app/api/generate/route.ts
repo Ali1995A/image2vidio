@@ -214,7 +214,7 @@ export async function POST(req: Request) {
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
-    const duration = Math.max(1.5, Math.min(3, Number.isFinite(seconds) ? seconds : 2));
+    const duration = Math.max(1, Math.min(3, Number.isFinite(seconds) ? seconds : 1));
 
     const pngBlob = await dataUrlToBlob(imageDataUrl);
     const form = new FormData();
