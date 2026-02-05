@@ -470,7 +470,8 @@ export async function POST(req: Request) {
         `- single main subject, simple shapes, clear silhouette\n` +
         `- preserve doodle color palette and composition (position/scale/empty space)\n` +
         `- background should support the doodle theme, minimal and not distracting\n` +
-        `- camera: static or very gentle pan; motion: subtle (blink/breathe/sway)\n` +
+        `- camera: static or very gentle pan; motion must be clearly visible (not a still image)\n` +
+        `- include 2-3 gentle but noticeable motions throughout (e.g., blink + head tilt/nod + wave/small bounce)\n` +
         `Negative:\n` +
         `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style`;
     }
