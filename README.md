@@ -35,3 +35,7 @@ npm run dev
 ## 随时衔接报告（给 AI/人类快速读）
 
 见 `docs/HANDOFF_REPORT.md`。
+
+## 备忘录（AI 无缝衔接）
+
+见 `docs/MEMO.md`。
