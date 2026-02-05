@@ -44,6 +44,40 @@ function extractTidFromText(text: string) {
   return m ? m[1] : "";
 }
 
+function pickStatusValue(json: unknown): string | null {
+  if (!json) return null;
+  if (typeof json !== "object") return null;
+  const anyJson = json as Record<string, any>;
+  const direct = anyJson.status ?? anyJson.state;
+  if (typeof direct === "string" && direct) return direct;
+  const data = anyJson.data;
+  if (data && typeof data === "object") {
+    const st = (data as any).status ?? (data as any).state;
+    if (typeof st === "string" && st) return st;
+  }
+  return null;
+}
+
+function pickMessageValue(json: unknown): string | null {
+  if (!json) return null;
+  if (typeof json === "string") return json;
+  if (typeof json !== "object") return null;
+  const anyJson = json as Record<string, any>;
+  const candidates = [anyJson?.error?.message, anyJson?.message, anyJson?.detail, anyJson?.error];
+  for (const c of candidates) if (typeof c === "string" && c) return c;
+  return null;
+}
+
+function isTerminalSuccess(status: string) {
+  const s = status.trim().toLowerCase();
+  return ["succeeded", "success", "completed", "complete", "done", "finished"].includes(s);
+}
+
+function isTerminalFailure(status: string) {
+  const s = status.trim().toLowerCase();
+  return ["failed", "fail", "error", "canceled", "cancelled", "rejected"].includes(s);
+}
+
 export default function VideoGenerator({ doodleRef }: Props) {
   const [seconds, setSeconds] = useState(1);
   const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
@@ -95,12 +129,69 @@ export default function VideoGenerator({ doodleRef }: Props) {
       });
 
       const tryHandlePending = async (pendingTid: string) => {
-        const maxWaitMs = 2_160_000;
-        const started = Date.now();
-        while (Date.now() - started < maxWaitMs) {
+        const cycleMs = 2_160_000;
+        const totalStarted = Date.now();
+        let cycleStarted = totalStarted;
+        let cycle = 1;
+        let pollCount = 0;
+
+        while (true) {
           if (runIdRef.current !== runId) return; // superseded
-          setStatus(`${py("shēng chéng zhōng")}…（生成中… ${Math.round((Date.now() - started) / 1000)}s）`);
+          const totalElapsed = Math.round((Date.now() - totalStarted) / 1000);
+          const cycleElapsed = Math.round((Date.now() - cycleStarted) / 1000);
+          setStatus(
+            `${py("shēng chéng zhōng")}…（生成中… ${totalElapsed}s · cycle ${cycle} ${cycleElapsed}s · tid ${pendingTid}）`,
+          );
           await new Promise((r) => setTimeout(r, 1800));
+
+          pollCount++;
+
+          if (Date.now() - cycleStarted > cycleMs) {
+            cycle++;
+            cycleStarted = Date.now();
+          }
+
+          // Occasionally check status to confirm terminal failure/success instead of guessing from content.
+          if (pollCount % 5 === 0) {
+            try {
+              const st = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  action: "status",
+                  tid: pendingTid,
+                }),
+              });
+
+              if (st.status !== 202) {
+                const ct = (st.headers.get("content-type") || "").toLowerCase();
+                if (ct.includes("application/json")) {
+                  const j = await st.json().catch(() => null);
+                  const statusVal = pickStatusValue(j);
+                  if (statusVal && isTerminalFailure(statusVal)) {
+                    const msg = pickMessageValue(j) || `${py("shī bài")}（失败）`;
+                    setError(`${py("shēng chéng shī bài")}（生成失败）：${msg}`);
+                    setStatus("");
+                    setIsBusy(false);
+                    return;
+                  }
+                  // If success is reported, fall through to content fetch; it may still 202 briefly.
+                  if (statusVal && isTerminalSuccess(statusVal)) {
+                    // no-op
+                  }
+                } else if (!st.ok) {
+                  const t = await st.text();
+                  const tidFromErr = extractTidFromText(t);
+                  // If it still references a tid, treat as pending and keep waiting.
+                  if (!tidFromErr) {
+                    // Don't fail fast on status endpoint; content polling is the source of truth.
+                  }
+                }
+              }
+            } catch {
+              // ignore status polling errors
+            }
+          }
 
           const poll = await fetch("/api/generate", {
             method: "POST",
@@ -148,7 +239,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
           setStatus(`${py("wán chéng")}!（完成!）`);
           return;
         }
-        throw new Error("shíjiān chāoshí（时间超时）");
       };
 
       if (res.status === 202) {

@@ -129,6 +129,17 @@ async function fetchVideoContent(params: {
   });
 }
 
+async function fetchVideoStatus(params: {
+  baseUrl: string;
+  apiKey: string;
+  tid: string;
+}): Promise<Response> {
+  const { baseUrl, apiKey, tid } = params;
+  return await fetch(`${baseUrl}/videos/${encodeURIComponent(tid)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -149,6 +160,52 @@ export async function POST(req: Request) {
         "Missing apiKey. Set AIHUBMIX_API_KEY in Vercel env (or pass apiKey from client).",
         { status: 400 },
       );
+
+    if (action === "status") {
+      if (!tid) return new NextResponse("Missing tid", { status: 400 });
+
+      const statusRes = await fetchVideoStatus({ baseUrl, apiKey, tid });
+      const ct = statusRes.headers.get("content-type") || "";
+      const ctLower = ct.toLowerCase();
+      const text = await statusRes.text();
+
+      const maybeJson = (() => {
+        if (ctLower.includes("application/json")) {
+          try {
+            return JSON.parse(text) as unknown;
+          } catch {
+            return null;
+          }
+        }
+        try {
+          if (text.trim().startsWith("{") || text.trim().startsWith("[")) return JSON.parse(text) as unknown;
+        } catch {
+          // ignore
+        }
+        return null;
+      })();
+
+      if (!statusRes.ok) {
+        const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+        if (pending) return NextResponse.json(pending, { status: 202 });
+        return new NextResponse(text || `Status fetch failed (${statusRes.status})`, { status: 502 });
+      }
+
+      const pending = parsePendingTidFromJson(maybeJson) ?? parsePendingTidFromText(text);
+      if (pending) return NextResponse.json(pending, { status: 202 });
+
+      if (maybeJson) {
+        return NextResponse.json(maybeJson, {
+          status: 200,
+          headers: { "cache-control": "no-store" },
+        });
+      }
+
+      return new NextResponse(text || "Upstream returned non-json status", {
+        status: 200,
+        headers: { "cache-control": "no-store" },
+      });
+    }
 
     if (action === "content") {
       if (!tid) return new NextResponse("Missing tid", { status: 400 });
