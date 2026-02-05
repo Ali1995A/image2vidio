@@ -95,7 +95,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
       });
 
       const tryHandlePending = async (pendingTid: string) => {
-        const maxWaitMs = 540_000;
+        const maxWaitMs = 2_160_000;
         const started = Date.now();
         while (Date.now() - started < maxWaitMs) {
           if (runIdRef.current !== runId) return; // superseded
