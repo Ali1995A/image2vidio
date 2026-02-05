@@ -74,6 +74,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [videoRemoteUrl, setVideoRemoteUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
   const runIdRef = useRef(0);
 
@@ -97,6 +98,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
+    setVideoRemoteUrl(null);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
@@ -211,6 +213,12 @@ export default function VideoGenerator({ doodleRef }: Props) {
           if (pollCt.includes("application/json")) {
             const j = await poll.json().catch(() => null);
             if (j?.pending) continue;
+            if (typeof j?.url === "string" && j.url) {
+              if (runIdRef.current !== runId) return;
+              setVideoRemoteUrl(j.url);
+              setStatus(`${py("wán chéng")}!（完成!）`);
+              return;
+            }
             throw new Error(JSON.stringify(j || { error: "json returned from content endpoint" }));
           }
           if (pollCt.startsWith("text/")) {
@@ -255,6 +263,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
             await tryHandlePending(j.tid);
             return;
           }
+          if (typeof j?.url === "string" && j.url) {
+            setVideoRemoteUrl(j.url);
+            setStatus(`${py("wán chéng")}!（完成!）`);
+            return;
+          }
           throw new Error(JSON.stringify(j || { error: `HTTP ${res.status}` }));
         }
         const text = await res.text();
@@ -269,6 +282,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
           const j = JSON.parse(text) as any;
           if (j?.pending && typeof j?.tid === "string" && j.tid) {
             await tryHandlePending(j.tid);
+            return;
+          }
+          if (typeof j?.url === "string" && j.url) {
+            setVideoRemoteUrl(j.url);
+            setStatus(`${py("wán chéng")}!（完成!）`);
             return;
           }
         } catch {
@@ -318,7 +336,12 @@ export default function VideoGenerator({ doodleRef }: Props) {
       setVideoBlob(video);
       setStatus(`${py("wán chéng")}!（完成!）`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/tls handshake timeout/i.test(msg)) {
+        setError(`${py("wǎng luò mán")}（网络慢）：qǐng zài shì yí cì（请再试一次）`);
+      } else {
+        setError(msg);
+      }
       setStatus("");
     } finally {
       setIsBusy(false);
@@ -332,6 +355,16 @@ export default function VideoGenerator({ doodleRef }: Props) {
   };
 
   const onDownload = () => {
+    if (videoRemoteUrl) {
+      const a = document.createElement("a");
+      a.href = videoRemoteUrl;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
     if (!videoBlob) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(videoBlob);
@@ -398,7 +431,9 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
       <div className="videoBox">
         <div className="videoStage">
-          {videoUrl ? (
+          {videoRemoteUrl ? (
+            <video className="videoEl" src={videoRemoteUrl} controls playsInline />
+          ) : videoUrl ? (
             <video className="videoEl" src={videoUrl} controls playsInline />
           ) : (
             <div className="hint" style={{ opacity: 0.35 }} />

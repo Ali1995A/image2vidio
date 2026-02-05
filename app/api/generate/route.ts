@@ -265,6 +265,13 @@ function pickUrlDeep(json: unknown): string | null {
   return null;
 }
 
+function isRemoteSignedUrl(url: string) {
+  const u = String(url || "").trim();
+  if (!u) return false;
+  // Prefer letting the browser fetch signed OSS URLs; server-side fetch can hit TLS handshake timeouts.
+  return /^https:\/\/.+aliyuncs\.com\//i.test(u) || /^https:\/\/.+oss-/i.test(u);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -361,6 +368,12 @@ export async function POST(req: Request) {
             const stJson = await stRes.json().catch(() => null);
             const u = pickUrlDeep(stJson);
             if (u) {
+              if (isRemoteSignedUrl(u)) {
+                return NextResponse.json(
+                  { url: u, tid, status: "completed" },
+                  { status: 200, headers: { "cache-control": "no-store" } },
+                );
+              }
               const videoRes = await fetch(u, { headers: { Authorization: `Bearer ${apiKey}` } });
               if (videoRes.ok) {
                 const vct = videoRes.headers.get("content-type") || "";
@@ -391,6 +404,14 @@ export async function POST(req: Request) {
         })();
         const pending = parsePendingFromAny(maybeJson ?? text);
         if (pending) return NextResponse.json(pending, { status: 202 });
+
+        const u = pickUrlDeep(maybeJson);
+        if (u) {
+          return NextResponse.json(
+            { url: u, tid, status: "completed" },
+            { status: 200, headers: { "cache-control": "no-store" } },
+          );
+        }
         return new NextResponse(text || "Upstream returned json, not video", { status: 502 });
       }
 
@@ -555,8 +576,14 @@ export async function POST(req: Request) {
     const genJson = await genRes.json().catch(async () => ({ raw: await genRes.text() }));
     const pendingFromOkJson = parsePendingFromAny(genJson);
     if (pendingFromOkJson) return NextResponse.json(pendingFromOkJson, { status: 202 });
-    const directUrl = pickUrl(genJson);
+    const directUrl = pickUrlDeep(genJson);
     if (directUrl) {
+      if (isRemoteSignedUrl(directUrl)) {
+        return NextResponse.json(
+          { url: directUrl, status: "completed" },
+          { status: 200, headers: { "cache-control": "no-store" } },
+        );
+      }
       const videoRes = await fetch(directUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
       if (!videoRes.ok) {
         const t = await videoRes.text();
