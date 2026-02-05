@@ -418,15 +418,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
               <span className="pinyin-text">{py("fēn xiǎng")}</span> 分享
             </button>
           ) : null}
-
-          <div className="timeInline" aria-label="video duration">
-            <div className="timeInlineLabel">
-              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · 5s
-            </div>
-            <div className="hint" style={{ opacity: 0.75, whiteSpace: "nowrap" }}>
-              wan 系列固定 5s（1–3s 会失败）
-            </div>
-          </div>
         </div>
 
         {status ? <div className="hint">{status}</div> : null}
