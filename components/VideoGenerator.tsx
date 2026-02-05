@@ -69,7 +69,7 @@ function isTerminalFailure(status: string) {
 }
 
 export default function VideoGenerator({ doodleRef }: Props) {
-  const [seconds, setSeconds] = useState(1);
+  const seconds = 5;
   const prompt = "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +97,6 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setError(null);
     setStatus("");
     setVideoBlob(null);
-    const sec = clamp(seconds, 1, 3);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
       return;
@@ -107,8 +106,9 @@ export default function VideoGenerator({ doodleRef }: Props) {
       setStatus(`${py("shēng chéng zhōng")}…（生成中…）`);
       const imgBlob =
         (await doodleRef.current.exportReferenceImageBlob?.({
-          width: 832,
-          height: 480,
+          // Smaller image for captioning (cost-friendly); video itself is generated via T2V.
+          width: 384,
+          height: 384,
           mimeType: "image/jpeg",
           quality: 0.92,
         })) ?? (await doodleRef.current.exportPngBlob());
@@ -118,7 +118,8 @@ export default function VideoGenerator({ doodleRef }: Props) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          seconds: sec,
+          mode: "smart",
+          seconds,
           prompt,
           imageDataUrl: pngDataUrl,
         }),
@@ -379,18 +380,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
           <div className="timeInline" aria-label="video duration">
             <div className="timeInlineLabel">
-              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · {clamp(seconds, 1, 3)}s
+              <span className="pinyin-text">{py("shí jiān")}</span> 时间 · 5s
             </div>
-            <input
-              className="slider timeInlineSlider"
-              type="range"
-              min={1}
-              max={3}
-              step={1}
-              value={seconds}
-              onChange={(e) => setSeconds(Number(e.target.value))}
-              disabled={isBusy}
-            />
+            <div className="hint" style={{ opacity: 0.75, whiteSpace: "nowrap" }}>
+              wan 系列固定 5s（1–3s 会失败）
+            </div>
           </div>
         </div>
 

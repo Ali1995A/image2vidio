@@ -176,6 +176,55 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return new Blob([bytes], { type: mime });
 }
 
+async function captionDoodle(params: {
+  baseUrl: string;
+  apiKey: string;
+  imageDataUrl: string;
+}): Promise<string> {
+  const { baseUrl, apiKey, imageDataUrl } = params;
+  const model = String(process.env.AIHUBMIX_CAPTION_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
+
+  const payload = {
+    model,
+    max_tokens: 80,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "Describe this child's doodle in one short sentence. Focus on main subject and simple colors. No extra commentary.",
+          },
+          {
+            type: "image_url",
+            image_url: { url: imageDataUrl },
+          },
+        ],
+      },
+    ],
+  };
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Caption failed: ${t || `HTTP ${res.status}`}`);
+  }
+
+  const j = (await res.json().catch(() => null)) as any;
+  const text = String(j?.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("Caption failed: empty response");
+  return text;
+}
+
 async function fetchVideoContent(params: {
   baseUrl: string;
   apiKey: string;
@@ -228,6 +277,7 @@ export async function POST(req: Request) {
     const seconds = Number(body?.seconds ?? 1);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
+    const mode = String(body?.mode || "").trim().toLowerCase();
     const action = String(body?.action || "").trim().toLowerCase();
     const tid = String(body?.tid || "").trim();
 
@@ -371,30 +421,60 @@ export async function POST(req: Request) {
     if (!imageDataUrl.startsWith("data:image/"))
       return new NextResponse("Missing imageDataUrl", { status: 400 });
 
-    const secondsClamped = Math.max(1, Math.min(3, Number.isFinite(seconds) ? seconds : 1));
     const safePrompt =
-      prompt ||
-      "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
+      prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
+
+    // NOTE: wan video models on AIHubMix only support 5s (and 10s only for specific preview models).
+    // Using 1–3s will generally fail with "Video generation failed".
+    const secondsFixed = 5;
+
+    const isSmart = mode === "smart" || mode === "" || mode === "auto";
+    const videoModel = isSmart ? "wan2.2-t2v-plus" : "wan2.2-i2v-plus";
+    const secondsFinal = secondsFixed;
+
+    let finalPrompt = safePrompt;
+    let useMultipart = !isSmart; // i2v needs multipart; smart uses t2v json.
+
+    if (isSmart) {
+      const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
+      finalPrompt = `${safePrompt}. Based on this doodle: ${caption}. Cute anime style, simple background, smooth motion.`;
+    }
 
     // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).
     // Keep a multipart fallback in case some upstream nodes require file upload.
     const jsonPayload = {
-      model: "wan2.2-i2v-plus",
-      seconds: secondsClamped,
+      model: videoModel,
+      seconds: secondsFinal,
       size: "832x480",
-      prompt: safePrompt,
-      // Pass through the data URL; upstream may accept base64 or data URL.
-      input_reference: imageDataUrl,
+      prompt: finalPrompt,
     };
 
-    let genRes = await fetch(`${baseUrl}/videos`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(jsonPayload),
-    });
+    let genRes: Response;
+
+    if (!useMultipart) {
+      genRes = await fetch(`${baseUrl}/videos`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(jsonPayload),
+      });
+    } else {
+      const pngBlob = await dataUrlToBlob(imageDataUrl);
+      const form = new FormData();
+      form.set("model", videoModel);
+      form.set("seconds", String(secondsFinal));
+      form.set("size", "832x480");
+      form.set("prompt", finalPrompt);
+      form.set("input_reference", pngBlob, "doodle.jpg");
+
+      genRes = await fetch(`${baseUrl}/videos`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+    }
 
     // Fallback to multipart if upstream complains about JSON shape.
     if (!genRes.ok) {
@@ -406,13 +486,13 @@ export async function POST(req: Request) {
           peekText.toLowerCase().includes("invalid") ||
           peekText.toLowerCase().includes("parse json"));
 
-      if (shouldTryMultipart) {
+      if (shouldTryMultipart && !useMultipart) {
         const pngBlob = await dataUrlToBlob(imageDataUrl);
         const form = new FormData();
-        form.set("model", "wan2.2-i2v-plus");
-        form.set("seconds", String(secondsClamped));
+        form.set("model", videoModel);
+        form.set("seconds", String(secondsFinal));
         form.set("size", "832x480");
-        form.set("prompt", safePrompt);
+        form.set("prompt", finalPrompt);
         form.set("input_reference", pngBlob, "doodle.png");
 
         genRes = await fetch(`${baseUrl}/videos`, {
