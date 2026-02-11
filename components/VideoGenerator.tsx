@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DoodlePadHandle } from "./DoodlePad";
 import { py } from "../lib/pinyin";
 
@@ -86,9 +86,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [videoRemoteUrl, setVideoRemoteUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
+  const [isPlaying, setIsPlaying] = useState(false);
   const runIdRef = useRef(0);
 
   const urlRef = useRef<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const videoUrl = useMemo(() => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -97,6 +99,18 @@ export default function VideoGenerator({ doodleRef }: Props) {
     urlRef.current = u;
     return u;
   }, [videoBlob]);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      v.pause();
+      v.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  }, [videoRemoteUrl, videoUrl]);
 
   const canShare = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -364,6 +378,20 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setStatus("");
   };
 
+  const togglePlay = async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (v.paused) {
+        await v.play();
+      } else {
+        v.pause();
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const onDownload = () => {
     if (videoRemoteUrl) {
       const a = document.createElement("a");
@@ -433,9 +461,49 @@ export default function VideoGenerator({ doodleRef }: Props) {
       <div className="videoBox">
         <div className="videoStage">
           {videoRemoteUrl ? (
-            <video className="videoEl" src={videoRemoteUrl} controls playsInline />
+            <>
+              <video
+                ref={videoRef}
+                className="videoEl"
+                src={videoRemoteUrl}
+                playsInline
+                preload="auto"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              />
+              {!isPlaying ? (
+                <button type="button" className="videoOverlayBtn" onClick={togglePlay}>
+                  <div>
+                    <span className="pinyin-text">{py("bō fàng")}</span>
+                    <br />
+                    播放
+                  </div>
+                </button>
+              ) : null}
+            </>
           ) : videoUrl ? (
-            <video className="videoEl" src={videoUrl} controls playsInline />
+            <>
+              <video
+                ref={videoRef}
+                className="videoEl"
+                src={videoUrl}
+                playsInline
+                preload="auto"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              />
+              {!isPlaying ? (
+                <button type="button" className="videoOverlayBtn" onClick={togglePlay}>
+                  <div>
+                    <span className="pinyin-text">{py("bō fàng")}</span>
+                    <br />
+                    播放
+                  </div>
+                </button>
+              ) : null}
+            </>
           ) : (
             <div className="hint" style={{ opacity: 0.35 }} />
           )}
