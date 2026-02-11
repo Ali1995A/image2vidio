@@ -473,8 +473,9 @@ export async function POST(req: Request) {
         `- background should support the doodle theme, minimal and not distracting\n` +
         `- camera: static or very gentle pan; motion must be clearly visible (not a still image)\n` +
         `- include 2-3 gentle but noticeable motions throughout (e.g., blink + head tilt/nod + wave/small bounce)\n` +
+        `- keep it intentionally childlike and rough: thick uneven strokes, crayon/marker scribble, minimal shading\n` +
         `Negative:\n` +
-        `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style`;
+        `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style, no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy`;
     }
 
     // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).

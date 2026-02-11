@@ -71,15 +71,16 @@ function isTerminalFailure(status: string) {
 export default function VideoGenerator({ doodleRef }: Props) {
   const seconds = 5;
   const prompt =
-    "更贴近儿童笔触的动漫风：幼儿蜡笔/马克笔涂鸦质感（childlike hand-drawn, crayon/marker scribble, paper texture），可爱、童真、温柔。" +
-    "线条要有一点不完美与手绘抖动感，不要太精致、不要太干净的工业线稿；避免写实与高精渲染（no realistic, no ultra-detailed, no glossy）。" +
+    "强烈的儿童笔触动漫风：幼儿蜡笔/马克笔涂鸦质感（very childlike hand-drawn, rough crayon/marker scribble, paper grain）。" +
+    "刻意“不精致”：线条要粗、抖、略不均匀；边缘允许轻微毛糙；上色像孩子涂色，尽量少阴影、少高光、少细节。" +
+    "绝对避免精致化：no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy, no realistic。" +
     "根据涂鸦内容生成简笔画风的单一主体：人物或拟人动物（轮廓清晰，形体简单）。" +
     "线条、色彩与构图 绝对遵循涂鸦的内容：主体位置/比例/留白关系保持一致；主色调严格贴近涂鸦，不要引入新的主导色（尤其不要改动主体的主色）。" +
     "背景自动匹配涂鸦主题：加入轻量的动漫背景或小道具辅助原始内容（柔和、简洁、不喧宾夺主）。" +
     "镜头与动作：固定机位或极轻微平移。动作要“明显但温柔”，不要像静态图片。" +
     "建议至少 2–3 个可见动作：眨眼、点头/歪头、挥手/小跳、身体轻轻左右摆动；全程持续有动感但不夸张。" +
     "避免复杂运镜与快速动作，不要剪辑跳切。" +
-    "画面干净、边缘清晰、无噪点、无闪烁、无文字/水印。";
+    "画面稳定：无闪烁、无跳帧、无噪点花屏、无文字/水印。";
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
