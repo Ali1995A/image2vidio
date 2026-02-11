@@ -469,6 +469,7 @@ export async function POST(req: Request) {
         `Hard rules:\n` +
         `- single main subject, simple shapes, clear silhouette\n` +
         `- preserve doodle line style, color palette, and composition at least 99% (line thickness/shape, position/scale/empty space)\n` +
+        `- base the character on the doodle lines; only do minimal refinement/anthropomorphism (simple face/limbs/accessory) and mostly colorize the existing doodle\n` +
         `- do NOT introduce new dominant colors; keep the doodle's main subject colors\n` +
         `- background should support the doodle theme, minimal and not distracting\n` +
         `- camera: static or very gentle pan; motion must be clearly visible (not a still image)\n` +
