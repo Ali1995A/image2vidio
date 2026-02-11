@@ -19,6 +19,9 @@ const nextConfig = {
       process.env.GIT_COMMIT_SHA?.slice(0, 7) ||
       getGitSha() ||
       "dev",
+    NEXT_PUBLIC_BUILD_AT: new Date().toISOString(),
+    NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV || "",
+    NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID: process.env.VERCEL_DEPLOYMENT_ID || "",
   },
 };
 

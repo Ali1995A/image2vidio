@@ -76,4 +76,4 @@
 - 全局样式：`app/globals.css`
 - 代码说明：`docs/CODEBASE.md`
 - 衔接报告：`docs/HANDOFF_REPORT.md`
-
+- 版本页面：`/version`（`app/version/page.tsx`），API：`/api/version`
