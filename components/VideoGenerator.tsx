@@ -71,7 +71,8 @@ function isTerminalFailure(status: string) {
 export default function VideoGenerator({ doodleRef }: Props) {
   const seconds = 5;
   const prompt =
-    "绘本/蜡笔质感的动漫风（storybook illustration, crayon/marker texture, clean outline, cute, kid-friendly）。" +
+    "更贴近儿童笔触的动漫风：幼儿蜡笔/马克笔涂鸦质感（childlike hand-drawn, crayon/marker scribble, paper texture），可爱、童真、温柔。" +
+    "线条要有一点不完美与手绘抖动感，不要太精致、不要太干净的工业线稿；避免写实与高精渲染（no realistic, no ultra-detailed, no glossy）。" +
     "根据涂鸦内容生成简笔画风的单一主体：人物或拟人动物（轮廓清晰，形体简单）。" +
     "线条、色彩与构图 绝对遵循涂鸦的内容：主体位置/比例/留白关系保持一致；主色调严格贴近涂鸦，不要引入新的主导色（尤其不要改动主体的主色）。" +
     "背景自动匹配涂鸦主题：加入轻量的动漫背景或小道具辅助原始内容（柔和、简洁、不喧宾夺主）。" +
