@@ -186,7 +186,7 @@ async function captionDoodle(params: {
 
   const payload = {
     model,
-    max_tokens: 80,
+    max_tokens: 120,
     messages: [
       {
         role: "user",
@@ -195,8 +195,9 @@ async function captionDoodle(params: {
             type: "text",
             text:
               "You are describing a child's doodle for an animation prompt.\n" +
-              "Return EXACTLY 3 lines (no markdown):\n" +
+              "Return EXACTLY 4 lines (no markdown):\n" +
               "SUBJECT=...\n" +
+              "INTENT=... (what the kid likely wants to express)\n" +
               "COLORS=... (list 3-6 simple color words)\n" +
               "COMPOSITION=... (where the subject is placed, scale, empty space)\n" +
               "Keep it short and concrete.",
@@ -468,7 +469,9 @@ export async function POST(req: Request) {
         `Doodle notes:\n${caption}\n` +
         `Hard rules:\n` +
         `- single main subject, simple shapes, clear silhouette\n` +
+        `- strictly preserve the original doodle strokes and imperfections; do NOT smooth or redraw as clean lineart\n` +
         `- preserve doodle line style, color palette, and composition at least 99% (line thickness/shape, position/scale/empty space)\n` +
+        `- understand the doodle intent first (use INTENT), then animate it without changing the composition\n` +
         `- base the character on the doodle lines; only do minimal refinement/anthropomorphism (simple face/limbs/accessory) and mostly colorize the existing doodle\n` +
         `- do NOT introduce new dominant colors; keep the doodle's main subject colors\n` +
         `- background should support the doodle theme, minimal and not distracting\n` +

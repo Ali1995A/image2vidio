@@ -8,6 +8,79 @@ type Props = {
   doodleRef: React.RefObject<DoodlePadHandle | null>;
 };
 
+const STYLE_PRESETS = [
+  {
+    id: "crayon",
+    pinyin: "là bǐ",
+    zh: "蜡笔",
+    prompt:
+      "风格：幼儿蜡笔/马克笔涂鸦质感（very childlike hand-drawn, rough crayon/marker scribble, paper grain）。" +
+      "刻意“不精致”：线条要粗、抖、略不均匀；上色像孩子涂色，尽量少阴影、少高光、少细节。",
+  },
+  {
+    id: "pencil",
+    pinyin: "cǎi qiān",
+    zh: "彩铅",
+    prompt:
+      "风格：儿童彩铅画册质感（colored pencil grain, paper texture）。" +
+      "允许非常轻的彩铅阴影，但不要精修、不要电影光影。",
+  },
+  {
+    id: "watercolor",
+    pinyin: "shuǐ cǎi",
+    zh: "水彩",
+    prompt:
+      "风格：儿童水彩画质感（watercolor wash, watercolor paper）。" +
+      "颜色轻柔晕染，但必须保留原始线条与构图，不要改形。",
+  },
+  {
+    id: "comic",
+    pinyin: "màn huà",
+    zh: "漫画",
+    prompt:
+      "风格：童趣漫画（simple comic ink lines, minimal screentone）。" +
+      "表情可以更生动，但不要复杂背景与镜头。",
+  },
+  {
+    id: "papercraft",
+    pinyin: "zhǐ ōu",
+    zh: "纸偶",
+    prompt:
+      "风格：儿童手工纸偶/拼贴（paper cut collage, handmade layers）。" +
+      "保持粗线条与简单色块，不要贴纸风、不需要质感精修。",
+  },
+  {
+    id: "doodle",
+    pinyin: "tú yā",
+    zh: "涂鸦",
+    prompt:
+      "风格：原始涂鸦强化（raw doodle）。" +
+      "尽量只做涂色与极少补线，保留不完美笔画与随手感。",
+  },
+] as const;
+
+type StyleId = (typeof STYLE_PRESETS)[number]["id"];
+
+function buildPrompt(styleId: StyleId) {
+  const style = STYLE_PRESETS.find((s) => s.id === styleId) ?? STYLE_PRESETS[0];
+
+  const globalStrict =
+    "全局要求（严格）：必须保留涂鸦原始笔画与不完美（保留每一笔的抖动/粗细/断续），不要平滑线条、不要重画成新线稿。" +
+    "先充分理解涂鸦想表达的主体与意图，再开始生成；允许轻量拟人化/补全，但只能在原笔画基础上加少量内容，不要破坏构图。";
+
+  const common =
+    "线条、色彩与构图绝对遵循涂鸦：主体位置/比例/留白关系保持一致；主色调严格贴近涂鸦，不要引入新的主导色（尤其不要改动主体的主色）。" +
+    "主要工作是“涂鸦上色/轻微补线/轻微背景辅助”，让它更像孩子画的彩色动漫涂鸦。" +
+    "背景自动匹配涂鸦主题：加入轻量的动漫背景或小道具辅助原始内容（柔和、简洁、不喧宾夺主）。" +
+    "镜头与动作：固定机位或极轻微平移。动作要“明显但温柔”，不要像静态图片。" +
+    "建议至少 2–3 个可见动作：眨眼、点头/歪头、挥手/小跳、身体轻轻左右摆动；全程持续有动感但不夸张。" +
+    "避免复杂运镜与快速动作，不要剪辑跳切。" +
+    "绝对避免精致化：no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy, no realistic。" +
+    "画面稳定：无闪烁、无跳帧、无噪点花屏、无文字/水印。";
+
+  return `${globalStrict}${style.prompt}${common}`;
+}
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -70,18 +143,8 @@ function isTerminalFailure(status: string) {
 
 export default function VideoGenerator({ doodleRef }: Props) {
   const seconds = 5;
-  const prompt =
-    "强烈的儿童笔触动漫风：幼儿蜡笔/马克笔涂鸦质感（very childlike hand-drawn, rough crayon/marker scribble, paper grain）。" +
-    "刻意“不精致”：线条要粗、抖、略不均匀；边缘允许轻微毛糙；上色像孩子涂色，尽量少阴影、少高光、少细节。" +
-    "绝对避免精致化：no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy, no realistic。" +
-    "在涂鸦原始线条基础上做轻量完善：保留原线条轮廓与笔触，只做小部分补全/拟人化（例如加简单表情、手脚、小配饰），不要重画成全新形体。" +
-    "主要工作是“涂鸦上色/轻微补线/轻微背景辅助”，让它更像孩子画的彩色动漫涂鸦。" +
-    "线条、色彩与构图绝对遵循涂鸦：主体位置/比例/留白关系保持一致；主色调严格贴近涂鸦，不要引入新的主导色（尤其不要改动主体的主色）。" +
-    "背景自动匹配涂鸦主题：加入轻量的动漫背景或小道具辅助原始内容（柔和、简洁、不喧宾夺主）。" +
-    "镜头与动作：固定机位或极轻微平移。动作要“明显但温柔”，不要像静态图片。" +
-    "建议至少 2–3 个可见动作：眨眼、点头/歪头、挥手/小跳、身体轻轻左右摆动；全程持续有动感但不夸张。" +
-    "避免复杂运镜与快速动作，不要剪辑跳切。" +
-    "画面稳定：无闪烁、无跳帧、无噪点花屏、无文字/水印。";
+  const [styleId, setStyleId] = useState<StyleId>("crayon");
+  const prompt = useMemo(() => buildPrompt(styleId), [styleId]);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
@@ -429,6 +492,25 @@ export default function VideoGenerator({ doodleRef }: Props) {
   return (
     <>
       <div className="controls">
+        <div className="row">
+          <div className="label">
+            <span className="pinyin-text">{py("fēng gé")}</span> 风格
+          </div>
+          <div className="styleGrid" aria-label="style presets">
+            {STYLE_PRESETS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`btn styleBtn ${styleId === s.id ? "btnOn" : ""}`}
+                onClick={() => setStyleId(s.id)}
+                disabled={isBusy}
+              >
+                <span className="pinyin-text">{py(s.pinyin)}</span> {s.zh}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="btnRow">
           <button
             type="button"

@@ -209,6 +209,19 @@ body {
   background: rgba(255, 227, 241, 0.95);
 }
 
+.styleGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.styleBtn {
+  padding: 10px 10px;
+  border-radius: 16px;
+  font-size: 13px;
+  box-shadow: 0 6px 14px rgba(255, 47, 143, 0.1);
+}
+
 .slider {
   width: 100%;
   accent-color: var(--pink-5);
