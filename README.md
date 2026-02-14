@@ -39,3 +39,7 @@ npm run dev
 ## 备忘录（AI 无缝衔接）
 
 见 `docs/MEMO.md`。
+
+## 模型选择与扩展报告（以后加模型用）
+
+见 `docs/MODEL_SELECTION.md`。

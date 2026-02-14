@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "神笔CC",
-  description: "Doodle → Anime video (1–3s)",
+  description: "Doodle → Anime video (5s)",
 };
 
 export const viewport: Viewport = {

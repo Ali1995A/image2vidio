@@ -53,6 +53,13 @@
 - 服务端在 smart 模式会把 caption 的 SUBJECT/COLORS/COMPOSITION 拼进 `finalPrompt`，并附加 Hard rules + Negative：
   - `app/api/generate/route.ts`
 
+## 下次要加“模型选择”从哪里下手
+
+- 先读：`docs/MODEL_SELECTION.md`
+- 入口文件：
+  - UI：`components/VideoGenerator.tsx`（增加 preset 选择按钮/设置）
+  - Backend：`app/api/generate/route.ts`（做 allowlist + 根据 preset 选 model/size/seconds/策略）
+
 ## 版本号/品牌
 
 - 标题：`神笔CC`：`app/layout.tsx`
