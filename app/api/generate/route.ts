@@ -504,6 +504,7 @@ export async function POST(req: Request) {
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
     const videoModel = "jimeng-3.0-720p";
     const secondsFinal = secondsFixed;
+    const sizeFinal = videoModel.startsWith("jimeng") ? "1280x720" : "720P";
 
     let finalPrompt = safePrompt;
     let useMultipart = !isSmart; // i2v needs multipart; smart uses t2v json.
@@ -541,7 +542,7 @@ export async function POST(req: Request) {
     const jsonPayload = {
       model: videoModel,
       seconds: secondsFinal,
-      size: "720P",
+      size: sizeFinal,
       prompt: finalPrompt,
     };
 
@@ -561,7 +562,7 @@ export async function POST(req: Request) {
       const form = new FormData();
       form.set("model", videoModel);
       form.set("seconds", String(secondsFinal));
-      form.set("size", "720P");
+      form.set("size", sizeFinal);
       form.set("prompt", finalPrompt);
       form.set("input_reference", pngBlob, "doodle.jpg");
 
@@ -587,7 +588,7 @@ export async function POST(req: Request) {
         const form = new FormData();
         form.set("model", videoModel);
         form.set("seconds", String(secondsFinal));
-        form.set("size", "720P");
+        form.set("size", sizeFinal);
         form.set("prompt", finalPrompt);
         form.set("input_reference", pngBlob, "doodle.png");
 
