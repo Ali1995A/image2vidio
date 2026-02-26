@@ -43,3 +43,7 @@ npm run dev
 ## 模型选择与扩展报告（以后加模型用）
 
 见 `docs/MODEL_SELECTION.md`。
+
+## 运维手册（部署/巡检/故障处理）
+
+见 `docs/OPS_RUNBOOK.md`。

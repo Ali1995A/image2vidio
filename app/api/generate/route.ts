@@ -231,6 +231,33 @@ async function captionDoodle(params: {
   return text;
 }
 
+function isLikelyCloudBearCaption(caption: string) {
+  const s = String(caption || "").toLowerCase();
+  if (!s) return false;
+
+  const hasBear = /\bbear\b|\bteddy\b|小熊|熊/.test(s);
+  const hasCloudLike = /\bcloud\b|\bfluffy\b|\bcotton\b|云|云朵|棉花/.test(s);
+  const hasRoundCute = /\bround\b|\bchubby\b|\bcute\b|\bkawaii\b|圆|可爱/.test(s);
+  const hasFaceCue = /\bears?\b|\bcheek\b|\bblush\b|\bbutton nose\b|\boval eyes?\b|耳朵|腮红|鼻子|眼睛/.test(s);
+
+  // Strong match: bear + cloud-like; weak fallback: cloud-like + round/cute + face cues.
+  if (hasBear && hasCloudLike) return true;
+  return hasCloudLike && hasRoundCute && hasFaceCue;
+}
+
+function cloudBearPromptHint() {
+  return (
+    `Character steering (only if doodle is similar): CLOUD BEAR (云朵熊).\n` +
+    `- keep one single mascot character: a cloud-shaped teddy bear, big fluffy silhouette, round head and round ears\n` +
+    `- face design: black oval eyes, tiny dark nose, small smiling mouth, soft pink cheeks\n` +
+    `- body design: puffy cotton-cloud body, short chubby limbs, soft rounded edges\n` +
+    `- color direction: white as main color with very light sky-blue shadows; optional tiny peach blush accents\n` +
+    `- expression and vibe: gentle, warm, innocent, child-friendly\n` +
+    `- background: simple blue-sky cloud scene, minimal details, never distract from the character\n` +
+    `- do not turn into realistic animal fur; keep it stylized, toy-like, cloud-like`
+  );
+}
+
 async function fetchVideoContent(params: {
   baseUrl: string;
   apiKey: string;
@@ -464,9 +491,11 @@ export async function POST(req: Request) {
 
     if (isSmart) {
       const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
+      const cloudBearHint = isLikelyCloudBearCaption(caption) ? `\n${cloudBearPromptHint()}\n` : "\n";
       finalPrompt =
         `${safePrompt}\n` +
         `Doodle notes:\n${caption}\n` +
+        cloudBearHint +
         `Hard rules:\n` +
         `- single main subject, simple shapes, clear silhouette\n` +
         `- strictly preserve the original doodle strokes and imperfections; do NOT smooth or redraw as clean lineart\n` +
