@@ -13,7 +13,10 @@ function isPendingMessage(text: string) {
     s.includes("processing") ||
     s.includes("queued") ||
     s.includes("running") ||
-    s.includes("pending")
+    s.includes("pending") ||
+    s.includes("high load") ||
+    s.includes("try again later") ||
+    s.includes("service is currently experiencing high load")
   );
 }
 
@@ -499,7 +502,7 @@ export async function POST(req: Request) {
     const secondsFixed = 4;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const videoModel = "veo-3.1-generate-preview";
+    const videoModel = "jimeng-3.0-720p";
     const secondsFinal = secondsFixed;
 
     let finalPrompt = safePrompt;
