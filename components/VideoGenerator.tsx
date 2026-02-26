@@ -85,6 +85,11 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function shortenText(s: string, max = 220) {
+  const t = String(s || "");
+  return t.length > max ? `${t.slice(0, max)}...` : t;
+}
+
 async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
   const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
   if (head.length >= 12) {
@@ -293,8 +298,8 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
           if (poll.status === 202) continue;
           if (!poll.ok) {
-            const t = await poll.text();
-            throw new Error(t || `HTTP ${poll.status}`);
+            const t = await poll.text().catch(() => "");
+            throw new Error(shortenText(t) || `HTTP ${poll.status}`);
           }
 
           const pollCt = (poll.headers.get("content-type") || "").toLowerCase();
@@ -309,27 +314,27 @@ export default function VideoGenerator({ doodleRef }: Props) {
             }
             throw new Error(JSON.stringify(j || { error: "json returned from content endpoint" }));
           }
-          if (pollCt.startsWith("text/")) {
-            const t = await poll.text();
-            throw new Error(t || "fǎnhuí bùshì shìpín（返回不是视频）");
-          }
-
           const blob = await poll.blob();
           const sniffed = await sniffBlobVideoType(blob);
-          if (!sniffed) {
+          if (sniffed) {
+            const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
+            if (runIdRef.current !== runId) return;
+            setVideoBlob(video);
+            setStatus(`${py("wán chéng")}!（完成!）`);
+            return;
+          }
+
+          if (pollCt.startsWith("text/")) {
+            const t = await blob.slice(0, 500).text().catch(() => "");
+            throw new Error(shortenText(t) || "fǎnhuí bùshì shìpín（返回不是视频）");
+          } else {
             const snippet = await blob.slice(0, 400).text().catch(() => "");
             throw new Error(
               snippet
-                ? `fǎnhuí bùshì shìpín（返回不是视频）：${snippet.slice(0, 200)}`
+                ? `fǎnhuí bùshì shìpín（返回不是视频）：${shortenText(snippet, 200)}`
                 : "fǎnhuí bùshì shìpín（返回不是视频）",
             );
           }
-
-          const video = blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: sniffed });
-          if (runIdRef.current !== runId) return;
-          setVideoBlob(video);
-          setStatus(`${py("wán chéng")}!（完成!）`);
-          return;
         }
       };
 
