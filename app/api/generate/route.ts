@@ -182,7 +182,7 @@ async function captionDoodle(params: {
   imageDataUrl: string;
 }): Promise<string> {
   const { baseUrl, apiKey, imageDataUrl } = params;
-  const model = String(process.env.AIHUBMIX_CAPTION_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
+  const model = String(process.env.AIHUBMIX_CAPTION_MODEL || "gemini-3-flash-preview").trim() || "gemini-3-flash-preview";
 
   const payload = {
     model,
@@ -485,12 +485,11 @@ export async function POST(req: Request) {
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    // NOTE: wan video models on AIHubMix only support 5s (and 10s only for specific preview models).
-    // Using 1–3s will generally fail with "Video generation failed".
+    // Keep server-side duration fixed to 5s for current product behavior.
     const secondsFixed = 5;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const videoModel = isSmart ? "wan2.2-t2v-plus" : "wan2.2-i2v-plus";
+    const videoModel = "jimeng-3.0-720p";
     const secondsFinal = secondsFixed;
 
     let finalPrompt = safePrompt;
