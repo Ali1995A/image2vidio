@@ -495,11 +495,11 @@ export async function POST(req: Request) {
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    // Keep server-side duration fixed to 5s for current product behavior.
-    const secondsFixed = 5;
+    // Keep server-side duration fixed to 8s for current product behavior.
+    const secondsFixed = 8;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const videoModel = "jimeng-3.0-720p";
+    const videoModel = "veo-3.1-generate-preview";
     const secondsFinal = secondsFixed;
 
     let finalPrompt = safePrompt;
@@ -538,7 +538,7 @@ export async function POST(req: Request) {
     const jsonPayload = {
       model: videoModel,
       seconds: secondsFinal,
-      size: "1280x720",
+      size: "720P",
       prompt: finalPrompt,
     };
 
@@ -558,7 +558,7 @@ export async function POST(req: Request) {
       const form = new FormData();
       form.set("model", videoModel);
       form.set("seconds", String(secondsFinal));
-      form.set("size", "1280x720");
+      form.set("size", "720P");
       form.set("prompt", finalPrompt);
       form.set("input_reference", pngBlob, "doodle.jpg");
 
@@ -584,7 +584,7 @@ export async function POST(req: Request) {
         const form = new FormData();
         form.set("model", videoModel);
         form.set("seconds", String(secondsFinal));
-        form.set("size", "1280x720");
+        form.set("size", "720P");
         form.set("prompt", finalPrompt);
         form.set("input_reference", pngBlob, "doodle.png");
 
