@@ -256,6 +256,8 @@ function cloudBearPromptHint() {
     `- keep one single mascot character: a cloud-shaped teddy bear, big fluffy silhouette, round head and round ears\n` +
     `- face design: black oval eyes, tiny dark nose, small smiling mouth, soft pink cheeks\n` +
     `- body design: puffy cotton-cloud body, short chubby limbs formed by cloud puffs, soft rounded edges\n` +
+    `- primary color rule (strict): the character body must be cloud-white / white-cloud color as the dominant color\n` +
+    `- secondary color rule: only very light sky-blue can appear as subtle shadow/fill; do not shift to gray, beige, or saturated colors\n` +
     `- color direction: white as main color with very light sky-blue shadows; optional tiny peach blush accents\n` +
     `- expression and vibe: gentle, warm, innocent, child-friendly\n` +
     `- background: simple blue-sky cloud scene, minimal details, never distract from the character\n` +
