@@ -195,11 +195,12 @@ async function captionDoodle(params: {
             type: "text",
             text:
               "You are describing a child's doodle for an animation prompt.\n" +
-              "Return EXACTLY 4 lines (no markdown):\n" +
+              "Return EXACTLY 5 lines (no markdown):\n" +
               "SUBJECT=...\n" +
               "INTENT=... (what the kid likely wants to express)\n" +
               "COLORS=... (list 3-6 simple color words)\n" +
               "COMPOSITION=... (where the subject is placed, scale, empty space)\n" +
+              "CLOUD_BEAR=YES or NO (YES only if it clearly looks like a cloud-featured bear: fluffy cloud body + bear ears/face)\n" +
               "Keep it short and concrete.",
           },
           {
@@ -235,13 +236,22 @@ function isLikelyCloudBearCaption(caption: string) {
   const s = String(caption || "").toLowerCase();
   if (!s) return false;
 
+  const explicitYes =
+    /\bcloud_bear\s*=\s*yes\b/.test(s) ||
+    /\bcloudbear\s*=\s*yes\b/.test(s) ||
+    /\b云朵熊\b/.test(s);
+  if (explicitYes) return true;
+
   const hasBear = /\bbear\b|\bteddy\b|小熊|熊/.test(s);
+  const hasEar = /\bears?\b|\bround ears?\b|耳朵/.test(s);
   const hasCloudLike = /\bcloud\b|\bfluffy\b|\bcotton\b|云|云朵|棉花/.test(s);
   const hasRoundCute = /\bround\b|\bchubby\b|\bcute\b|\bkawaii\b|圆|可爱/.test(s);
   const hasFaceCue = /\bears?\b|\bcheek\b|\bblush\b|\bbutton nose\b|\boval eyes?\b|耳朵|腮红|鼻子|眼睛/.test(s);
+  const hasWhiteCue = /\bwhite\b|\bcloud-white\b|白色|白云/.test(s);
 
   // Strong match: bear + cloud-like; weak fallback: cloud-like + round/cute + face cues.
   if (hasBear && hasCloudLike) return true;
+  if ((hasBear || hasEar) && hasCloudLike && hasWhiteCue) return true;
   return hasCloudLike && hasRoundCute && hasFaceCue;
 }
 
@@ -497,11 +507,17 @@ export async function POST(req: Request) {
 
     if (isSmart) {
       const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
-      const cloudBearHint = isLikelyCloudBearCaption(caption) ? `\n${cloudBearPromptHint()}\n` : "\n";
+      const cloudBearMode = isLikelyCloudBearCaption(caption);
+      const cloudBearHint = cloudBearMode ? `\n${cloudBearPromptHint()}\n` : "\n";
       finalPrompt =
         `${safePrompt}\n` +
         `Doodle notes:\n${caption}\n` +
         cloudBearHint +
+        (cloudBearMode
+          ? `Subject lock (highest priority):\n` +
+            `- main subject MUST be 云朵熊 (cloud bear), not a human child or other mascot\n` +
+            `- keep one single cloud-bear subject through all frames\n`
+          : "") +
         `Hard rules:\n` +
         `- single main subject, simple shapes, clear silhouette\n` +
         `- strictly preserve the original doodle strokes and imperfections; do NOT smooth or redraw as clean lineart\n` +
