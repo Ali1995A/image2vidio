@@ -13,10 +13,7 @@ function isPendingMessage(text: string) {
     s.includes("processing") ||
     s.includes("queued") ||
     s.includes("running") ||
-    s.includes("pending") ||
-    s.includes("high load") ||
-    s.includes("try again later") ||
-    s.includes("service is currently experiencing high load")
+    s.includes("pending")
   );
 }
 
@@ -185,7 +182,7 @@ async function captionDoodle(params: {
   imageDataUrl: string;
 }): Promise<string> {
   const { baseUrl, apiKey, imageDataUrl } = params;
-  const model = String(process.env.AIHUBMIX_CAPTION_MODEL || "gemini-3-flash-preview").trim() || "gemini-3-flash-preview";
+  const model = String(process.env.AIHUBMIX_CAPTION_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
 
   const payload = {
     model,
@@ -198,12 +195,11 @@ async function captionDoodle(params: {
             type: "text",
             text:
               "You are describing a child's doodle for an animation prompt.\n" +
-              "Return EXACTLY 5 lines (no markdown):\n" +
+              "Return EXACTLY 4 lines (no markdown):\n" +
               "SUBJECT=...\n" +
               "INTENT=... (what the kid likely wants to express)\n" +
               "COLORS=... (list 3-6 simple color words)\n" +
               "COMPOSITION=... (where the subject is placed, scale, empty space)\n" +
-              "CLOUD_BEAR=YES or NO (YES only if it clearly looks like a cloud-featured bear: fluffy cloud body + bear ears/face)\n" +
               "Keep it short and concrete.",
           },
           {
@@ -239,22 +235,13 @@ function isLikelyCloudBearCaption(caption: string) {
   const s = String(caption || "").toLowerCase();
   if (!s) return false;
 
-  const explicitYes =
-    /\bcloud_bear\s*=\s*yes\b/.test(s) ||
-    /\bcloudbear\s*=\s*yes\b/.test(s) ||
-    /\b云朵熊\b/.test(s);
-  if (explicitYes) return true;
-
   const hasBear = /\bbear\b|\bteddy\b|小熊|熊/.test(s);
-  const hasEar = /\bears?\b|\bround ears?\b|耳朵/.test(s);
   const hasCloudLike = /\bcloud\b|\bfluffy\b|\bcotton\b|云|云朵|棉花/.test(s);
   const hasRoundCute = /\bround\b|\bchubby\b|\bcute\b|\bkawaii\b|圆|可爱/.test(s);
   const hasFaceCue = /\bears?\b|\bcheek\b|\bblush\b|\bbutton nose\b|\boval eyes?\b|耳朵|腮红|鼻子|眼睛/.test(s);
-  const hasWhiteCue = /\bwhite\b|\bcloud-white\b|白色|白云/.test(s);
 
   // Strong match: bear + cloud-like; weak fallback: cloud-like + round/cute + face cues.
   if (hasBear && hasCloudLike) return true;
-  if ((hasBear || hasEar) && hasCloudLike && hasWhiteCue) return true;
   return hasCloudLike && hasRoundCute && hasFaceCue;
 }
 
@@ -325,17 +312,6 @@ function isRemoteSignedUrl(url: string) {
   return /^https:\/\/.+aliyuncs\.com\//i.test(u) || /^https:\/\/.+oss-/i.test(u);
 }
 
-function shouldRetryVideoCreate(status: number, text: string) {
-  const s = String(text || "").toLowerCase();
-  if (status >= 500) return true;
-  return (
-    s.includes("video generation failed") ||
-    s.includes("high load") ||
-    s.includes("try again later") ||
-    s.includes("timeout")
-  );
-}
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -348,8 +324,6 @@ export async function POST(req: Request) {
     const seconds = Number(body?.seconds ?? 1);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
-    const captionImageDataUrl = String(body?.captionImageDataUrl || imageDataUrl || "").trim();
-    const referenceImageDataUrl = String(body?.referenceImageDataUrl || imageDataUrl || "").trim();
     const mode = String(body?.mode || "").trim().toLowerCase();
     const action = String(body?.action || "").trim().toLowerCase();
     const tid = String(body?.tid || "").trim();
@@ -505,38 +479,30 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!captionImageDataUrl.startsWith("data:image/"))
-      return new NextResponse("Missing captionImageDataUrl (or imageDataUrl)", { status: 400 });
-    if (!referenceImageDataUrl.startsWith("data:image/"))
-      return new NextResponse("Missing referenceImageDataUrl (or imageDataUrl)", { status: 400 });
+    if (!imageDataUrl.startsWith("data:image/"))
+      return new NextResponse("Missing imageDataUrl", { status: 400 });
 
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    // Roll back to wan2.2 t2v baseline: fixed 5s, 480P.
+    // NOTE: wan video models on AIHubMix only support 5s (and 10s only for specific preview models).
+    // Using 1–3s will generally fail with "Video generation failed".
     const secondsFixed = 5;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const primaryVideoModel = "wan2.2-i2v-plus";
-    const fallbackVideoModel = "wan2.2-t2v-plus";
+    const videoModel = isSmart ? "wan2.2-t2v-plus" : "wan2.2-i2v-plus";
     const secondsFinal = secondsFixed;
-    const sizeFinal = "832x480";
 
     let finalPrompt = safePrompt;
+    let useMultipart = !isSmart; // i2v needs multipart; smart uses t2v json.
 
     if (isSmart) {
-      const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl: captionImageDataUrl });
-      const cloudBearMode = isLikelyCloudBearCaption(caption);
-      const cloudBearHint = cloudBearMode ? `\n${cloudBearPromptHint()}\n` : "\n";
+      const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
+      const cloudBearHint = isLikelyCloudBearCaption(caption) ? `\n${cloudBearPromptHint()}\n` : "\n";
       finalPrompt =
         `${safePrompt}\n` +
         `Doodle notes:\n${caption}\n` +
         cloudBearHint +
-        (cloudBearMode
-          ? `Subject lock (highest priority):\n` +
-            `- main subject MUST be 云朵熊 (cloud bear), not a human child or other mascot\n` +
-            `- keep one single cloud-bear subject through all frames\n`
-          : "") +
         `Hard rules:\n` +
         `- single main subject, simple shapes, clear silhouette\n` +
         `- strictly preserve the original doodle strokes and imperfections; do NOT smooth or redraw as clean lineart\n` +
@@ -552,68 +518,70 @@ export async function POST(req: Request) {
         `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style, no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy`;
     }
 
-    const postVideoJson = async (model: string) => {
-      const payload = {
-        model,
-        seconds: secondsFinal,
-        size: sizeFinal,
-        prompt: finalPrompt,
-      };
-      return await fetch(`${baseUrl}/videos`, {
+    // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).
+    // Keep a multipart fallback in case some upstream nodes require file upload.
+    const jsonPayload = {
+      model: videoModel,
+      seconds: secondsFinal,
+      size: "832x480",
+      prompt: finalPrompt,
+    };
+
+    let genRes: Response;
+
+    if (!useMultipart) {
+      genRes = await fetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(jsonPayload),
       });
-    };
-
-    const postVideoI2V = async (model: string, filename: string) => {
-      const pngBlob = await dataUrlToBlob(referenceImageDataUrl);
+    } else {
+      const pngBlob = await dataUrlToBlob(imageDataUrl);
       const form = new FormData();
-      form.set("model", model);
+      form.set("model", videoModel);
       form.set("seconds", String(secondsFinal));
-      form.set("size", sizeFinal);
+      form.set("size", "832x480");
       form.set("prompt", finalPrompt);
-      form.set("input_reference", pngBlob, filename);
-      return await fetch(`${baseUrl}/videos`, {
+      form.set("input_reference", pngBlob, "doodle.jpg");
+
+      genRes = await fetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,
       });
-    };
-
-    // Primary strategy: i2v (strictly follows doodle). Fallback: smart t2v for stability.
-    const attempts: Array<() => Promise<Response>> = isSmart
-      ? [
-          () => postVideoI2V(primaryVideoModel, "doodle.jpg"),
-          () => postVideoI2V(primaryVideoModel, "doodle.png"),
-          () => postVideoJson(fallbackVideoModel),
-        ]
-      : [() => postVideoI2V(primaryVideoModel, "doodle.jpg")];
-
-    let genRes: Response | null = null;
-    for (let i = 0; i < attempts.length; i++) {
-      const r = await attempts[i]();
-      genRes = r;
-      if (r.ok) break;
-
-      const text = await r.clone().text().catch(() => "");
-      const maybeJson = (() => {
-        try {
-          return JSON.parse(text) as unknown;
-        } catch {
-          return null;
-        }
-      })();
-      const pending = parsePendingFromAny(maybeJson ?? text);
-      if (pending) break;
-
-      if (!shouldRetryVideoCreate(r.status, text)) break;
     }
 
-    if (!genRes) return new NextResponse("Video create failed: no response", { status: 502 });
+    // Fallback to multipart if upstream complains about JSON shape.
+    if (!genRes.ok) {
+      const peekCt = (genRes.headers.get("content-type") || "").toLowerCase();
+      const peekText = await genRes.clone().text().catch(() => "");
+      const shouldTryMultipart =
+        peekCt.includes("application/json") &&
+        (peekText.toLowerCase().includes("missing") ||
+          peekText.toLowerCase().includes("invalid") ||
+          peekText.toLowerCase().includes("parse json"));
+
+      if (shouldTryMultipart && !useMultipart) {
+        const pngBlob = await dataUrlToBlob(imageDataUrl);
+        const form = new FormData();
+        form.set("model", videoModel);
+        form.set("seconds", String(secondsFinal));
+        form.set("size", "832x480");
+        form.set("prompt", finalPrompt);
+        form.set("input_reference", pngBlob, "doodle.png");
+
+        genRes = await fetch(`${baseUrl}/videos`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: form,
+        });
+      }
+    }
 
     const genContentType = genRes.headers.get("content-type") || "";
     if (!genRes.ok) {
