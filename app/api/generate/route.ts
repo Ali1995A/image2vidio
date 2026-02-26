@@ -248,6 +248,8 @@ function isLikelyCloudBearCaption(caption: string) {
 function cloudBearPromptHint() {
   return (
     `Character steering (only if doodle is similar): CLOUD BEAR (云朵熊).\n` +
+    `- keyword must be: 云朵熊 (cloud bear)\n` +
+    `- core identity: a BEAR with obvious cloud features; the cloud trait must be visually dominant\n` +
     `- keep one single mascot character: a cloud-shaped teddy bear, big fluffy silhouette, round head and round ears\n` +
     `- face design: black oval eyes, tiny dark nose, small smiling mouth, soft pink cheeks\n` +
     `- body design: puffy cotton-cloud body, short chubby limbs, soft rounded edges\n` +
