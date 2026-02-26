@@ -522,7 +522,7 @@ export async function POST(req: Request) {
     const jsonPayload = {
       model: videoModel,
       seconds: secondsFinal,
-      size: "832x480",
+      size: "1280x720",
       prompt: finalPrompt,
     };
 
@@ -542,7 +542,7 @@ export async function POST(req: Request) {
       const form = new FormData();
       form.set("model", videoModel);
       form.set("seconds", String(secondsFinal));
-      form.set("size", "832x480");
+      form.set("size", "1280x720");
       form.set("prompt", finalPrompt);
       form.set("input_reference", pngBlob, "doodle.jpg");
 
@@ -568,7 +568,7 @@ export async function POST(req: Request) {
         const form = new FormData();
         form.set("model", videoModel);
         form.set("seconds", String(secondsFinal));
-        form.set("size", "832x480");
+        form.set("size", "1280x720");
         form.set("prompt", finalPrompt);
         form.set("input_reference", pngBlob, "doodle.png");
 
