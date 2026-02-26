@@ -498,8 +498,8 @@ export async function POST(req: Request) {
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    // Keep server-side duration fixed to 4s for faster turnaround.
-    const secondsFixed = 4;
+    // Keep server-side duration fixed to 6s for better compatibility/perf balance.
+    const secondsFixed = 6;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
     const videoModel = "jimeng-3.0-720p";
