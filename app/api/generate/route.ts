@@ -502,12 +502,12 @@ export async function POST(req: Request) {
     const secondsFixed = 5;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const videoModel = "wan2.2-t2v-plus";
+    const primaryVideoModel = "wan2.2-i2v-plus";
+    const fallbackVideoModel = "wan2.2-t2v-plus";
     const secondsFinal = secondsFixed;
     const sizeFinal = "832x480";
 
     let finalPrompt = safePrompt;
-    let useMultipart = !isSmart; // i2v needs multipart; smart uses t2v json.
 
     if (isSmart) {
       const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
@@ -537,68 +537,53 @@ export async function POST(req: Request) {
         `no text, no watermark, no logo, no subtitle, no extra characters, no crowd, no complex camera movement, no fast motion, no jump cuts, no flicker, no glitch, no horror, no gore, no realistic style, no polished rendering, no clean vector lines, no smooth gradients, no cinematic lighting, no ultra-detailed, no glossy`;
     }
 
-    // Prefer JSON request body (aihubmix /v1 is OpenAI-like and often expects JSON).
-    // Keep a multipart fallback in case some upstream nodes require file upload.
-    const jsonPayload = {
-      model: videoModel,
-      seconds: secondsFinal,
-      size: sizeFinal,
-      prompt: finalPrompt,
-    };
-
-    let genRes: Response;
-
-    if (!useMultipart) {
-      genRes = await fetch(`${baseUrl}/videos`, {
+    const postVideoJson = async (model: string) => {
+      const payload = {
+        model,
+        seconds: secondsFinal,
+        size: sizeFinal,
+        prompt: finalPrompt,
+      };
+      return await fetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(jsonPayload),
+        body: JSON.stringify(payload),
       });
-    } else {
+    };
+
+    const postVideoI2V = async (model: string, filename: string) => {
       const pngBlob = await dataUrlToBlob(imageDataUrl);
       const form = new FormData();
-      form.set("model", videoModel);
+      form.set("model", model);
       form.set("seconds", String(secondsFinal));
       form.set("size", sizeFinal);
       form.set("prompt", finalPrompt);
-      form.set("input_reference", pngBlob, "doodle.jpg");
-
-      genRes = await fetch(`${baseUrl}/videos`, {
+      form.set("input_reference", pngBlob, filename);
+      return await fetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,
       });
-    }
+    };
 
-    // Fallback to multipart if upstream complains about JSON shape.
-    if (!genRes.ok) {
-      const peekCt = (genRes.headers.get("content-type") || "").toLowerCase();
-      const peekText = await genRes.clone().text().catch(() => "");
-      const shouldTryMultipart =
-        peekCt.includes("application/json") &&
-        (peekText.toLowerCase().includes("missing") ||
-          peekText.toLowerCase().includes("invalid") ||
-          peekText.toLowerCase().includes("parse json"));
+    // Primary strategy: i2v (strictly follows doodle). Fallback: smart t2v for stability.
+    let genRes = await postVideoI2V(primaryVideoModel, "doodle.jpg");
 
-      if (shouldTryMultipart && !useMultipart) {
-        const pngBlob = await dataUrlToBlob(imageDataUrl);
-        const form = new FormData();
-        form.set("model", videoModel);
-        form.set("seconds", String(secondsFinal));
-        form.set("size", sizeFinal);
-        form.set("prompt", finalPrompt);
-        form.set("input_reference", pngBlob, "doodle.png");
-
-        genRes = await fetch(`${baseUrl}/videos`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: form,
-        });
+    if (!genRes.ok && isSmart) {
+      const text = await genRes.clone().text().catch(() => "");
+      const maybeJson = (() => {
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return null;
+        }
+      })();
+      const pending = parsePendingFromAny(maybeJson ?? text);
+      if (!pending) {
+        genRes = await postVideoJson(fallbackVideoModel);
       }
     }
 
