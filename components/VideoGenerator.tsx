@@ -228,7 +228,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
     setIsBusy(true);
     try {
       setStatus(`${py("shēng chéng zhōng")}…（生成中…）`);
-      const imgBlob =
+      const captionBlob =
         (await doodleRef.current.exportReferenceImageBlob?.({
           // Smaller image for captioning (cost-friendly); video itself is generated via T2V.
           width: 384,
@@ -236,13 +236,26 @@ export default function VideoGenerator({ doodleRef }: Props) {
           mimeType: "image/jpeg",
           quality: 0.92,
         })) ?? (await doodleRef.current.exportPngBlob());
-      const pngDataUrl = await blobToDataUrl(imgBlob);
+      const referenceBlob =
+        (await doodleRef.current.exportReferenceImageBlob?.({
+          // Keep 480P ratio for i2v reference to improve stability.
+          width: 832,
+          height: 480,
+          mimeType: "image/jpeg",
+          quality: 0.95,
+        })) ?? (await doodleRef.current.exportPngBlob());
+      const captionDataUrl = await blobToDataUrl(captionBlob);
+      const referenceDataUrl = await blobToDataUrl(referenceBlob);
 
       const res = await postGenerateWithRetry({
         mode: "smart",
         seconds,
         prompt,
-        imageDataUrl: pngDataUrl,
+        // Backward-compatible field.
+        imageDataUrl: captionDataUrl,
+        // Explicit split for backend: small image for caption, 16:9 image for i2v.
+        captionImageDataUrl: captionDataUrl,
+        referenceImageDataUrl: referenceDataUrl,
       });
 
       const tryHandlePending = async (pendingTid: string) => {

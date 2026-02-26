@@ -325,6 +325,17 @@ function isRemoteSignedUrl(url: string) {
   return /^https:\/\/.+aliyuncs\.com\//i.test(u) || /^https:\/\/.+oss-/i.test(u);
 }
 
+function shouldRetryVideoCreate(status: number, text: string) {
+  const s = String(text || "").toLowerCase();
+  if (status >= 500) return true;
+  return (
+    s.includes("video generation failed") ||
+    s.includes("high load") ||
+    s.includes("try again later") ||
+    s.includes("timeout")
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -337,6 +348,8 @@ export async function POST(req: Request) {
     const seconds = Number(body?.seconds ?? 1);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
+    const captionImageDataUrl = String(body?.captionImageDataUrl || imageDataUrl || "").trim();
+    const referenceImageDataUrl = String(body?.referenceImageDataUrl || imageDataUrl || "").trim();
     const mode = String(body?.mode || "").trim().toLowerCase();
     const action = String(body?.action || "").trim().toLowerCase();
     const tid = String(body?.tid || "").trim();
@@ -492,8 +505,10 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!imageDataUrl.startsWith("data:image/"))
-      return new NextResponse("Missing imageDataUrl", { status: 400 });
+    if (!captionImageDataUrl.startsWith("data:image/"))
+      return new NextResponse("Missing captionImageDataUrl (or imageDataUrl)", { status: 400 });
+    if (!referenceImageDataUrl.startsWith("data:image/"))
+      return new NextResponse("Missing referenceImageDataUrl (or imageDataUrl)", { status: 400 });
 
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
@@ -510,7 +525,7 @@ export async function POST(req: Request) {
     let finalPrompt = safePrompt;
 
     if (isSmart) {
-      const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl });
+      const caption = await captionDoodle({ baseUrl, apiKey, imageDataUrl: captionImageDataUrl });
       const cloudBearMode = isLikelyCloudBearCaption(caption);
       const cloudBearHint = cloudBearMode ? `\n${cloudBearPromptHint()}\n` : "\n";
       finalPrompt =
@@ -555,7 +570,7 @@ export async function POST(req: Request) {
     };
 
     const postVideoI2V = async (model: string, filename: string) => {
-      const pngBlob = await dataUrlToBlob(imageDataUrl);
+      const pngBlob = await dataUrlToBlob(referenceImageDataUrl);
       const form = new FormData();
       form.set("model", model);
       form.set("seconds", String(secondsFinal));
@@ -570,10 +585,21 @@ export async function POST(req: Request) {
     };
 
     // Primary strategy: i2v (strictly follows doodle). Fallback: smart t2v for stability.
-    let genRes = await postVideoI2V(primaryVideoModel, "doodle.jpg");
+    const attempts: Array<() => Promise<Response>> = isSmart
+      ? [
+          () => postVideoI2V(primaryVideoModel, "doodle.jpg"),
+          () => postVideoI2V(primaryVideoModel, "doodle.png"),
+          () => postVideoJson(fallbackVideoModel),
+        ]
+      : [() => postVideoI2V(primaryVideoModel, "doodle.jpg")];
 
-    if (!genRes.ok && isSmart) {
-      const text = await genRes.clone().text().catch(() => "");
+    let genRes: Response | null = null;
+    for (let i = 0; i < attempts.length; i++) {
+      const r = await attempts[i]();
+      genRes = r;
+      if (r.ok) break;
+
+      const text = await r.clone().text().catch(() => "");
       const maybeJson = (() => {
         try {
           return JSON.parse(text) as unknown;
@@ -582,10 +608,12 @@ export async function POST(req: Request) {
         }
       })();
       const pending = parsePendingFromAny(maybeJson ?? text);
-      if (!pending) {
-        genRes = await postVideoJson(fallbackVideoModel);
-      }
+      if (pending) break;
+
+      if (!shouldRetryVideoCreate(r.status, text)) break;
     }
+
+    if (!genRes) return new NextResponse("Video create failed: no response", { status: 502 });
 
     const genContentType = genRes.headers.get("content-type") || "";
     if (!genRes.ok) {
