@@ -90,6 +90,35 @@ function shortenText(s: string, max = 220) {
   return t.length > max ? `${t.slice(0, max)}...` : t;
 }
 
+function isLikelyTransientNetworkError(msg: string) {
+  const s = String(msg || "").toLowerCase();
+  return (
+    s.includes("load failed") ||
+    s.includes("failed to fetch") ||
+    s.includes("networkerror") ||
+    s.includes("network request failed")
+  );
+}
+
+async function postGenerateWithRetry(body: unknown, maxRetries = 2): Promise<Response> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!isLikelyTransientNetworkError(msg) || attempt >= maxRetries) throw e;
+      const waitMs = 500 * (attempt + 1);
+      await new Promise((r) => setTimeout(r, waitMs));
+      attempt++;
+    }
+  }
+}
+
 async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
   const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
   if (head.length >= 12) {
@@ -209,15 +238,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
         })) ?? (await doodleRef.current.exportPngBlob());
       const pngDataUrl = await blobToDataUrl(imgBlob);
 
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "smart",
-          seconds,
-          prompt,
-          imageDataUrl: pngDataUrl,
-        }),
+      const res = await postGenerateWithRetry({
+        mode: "smart",
+        seconds,
+        prompt,
+        imageDataUrl: pngDataUrl,
       });
 
       const tryHandlePending = async (pendingTid: string) => {
@@ -253,14 +278,13 @@ export default function VideoGenerator({ doodleRef }: Props) {
           // Occasionally check status to confirm terminal failure/success instead of guessing from content.
           if (pollCount % 5 === 0) {
             try {
-              const st = await fetch("/api/generate", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
+              const st = await postGenerateWithRetry(
+                {
                   action: "status",
                   tid: pendingTid,
-                }),
-              });
+                },
+                1,
+              );
 
               if (st.status !== 202) {
                 const ct = (st.headers.get("content-type") || "").toLowerCase();
@@ -287,14 +311,13 @@ export default function VideoGenerator({ doodleRef }: Props) {
             }
           }
 
-          const poll = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
+          const poll = await postGenerateWithRetry(
+            {
               action: "content",
               tid: pendingTid,
-            }),
-          });
+            },
+            1,
+          );
 
           if (poll.status === 202) continue;
           if (!poll.ok) {
