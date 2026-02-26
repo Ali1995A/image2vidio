@@ -498,13 +498,13 @@ export async function POST(req: Request) {
     const safePrompt =
       prompt || "anime style, cute, colorful, clean lines, soft lighting, smooth motion";
 
-    // Keep server-side duration fixed to 6s for better compatibility/perf balance.
-    const secondsFixed = 6;
+    // Roll back to wan2.2 t2v baseline: fixed 5s, 480P.
+    const secondsFixed = 5;
 
     const isSmart = mode === "smart" || mode === "" || mode === "auto";
-    const videoModel = "jimeng-3.0-720p";
+    const videoModel = "wan2.2-t2v-plus";
     const secondsFinal = secondsFixed;
-    const sizeFinal = videoModel.startsWith("jimeng") ? "1280x720" : "720P";
+    const sizeFinal = "832x480";
 
     let finalPrompt = safePrompt;
     let useMultipart = !isSmart; // i2v needs multipart; smart uses t2v json.
