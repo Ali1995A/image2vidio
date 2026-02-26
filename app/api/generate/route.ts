@@ -250,13 +250,16 @@ function cloudBearPromptHint() {
     `Character steering (only if doodle is similar): CLOUD BEAR (云朵熊).\n` +
     `- keyword must be: 云朵熊 (cloud bear)\n` +
     `- core identity: a BEAR with obvious cloud features; the cloud trait must be visually dominant\n` +
+    `- cloud-first silhouette rule: at least 70% of the visible body reads as cloud puffs/clusters, then bear cues are layered on top\n` +
+    `- contour rule: use cauliflower-like cloud edges and soft puff lobes, avoid clean animal anatomy lines\n` +
+    `- material rule: vapor-cotton look, airy and fluffy volume, soft translucent rim light, no dense fur strands\n` +
     `- keep one single mascot character: a cloud-shaped teddy bear, big fluffy silhouette, round head and round ears\n` +
     `- face design: black oval eyes, tiny dark nose, small smiling mouth, soft pink cheeks\n` +
-    `- body design: puffy cotton-cloud body, short chubby limbs, soft rounded edges\n` +
+    `- body design: puffy cotton-cloud body, short chubby limbs formed by cloud puffs, soft rounded edges\n` +
     `- color direction: white as main color with very light sky-blue shadows; optional tiny peach blush accents\n` +
     `- expression and vibe: gentle, warm, innocent, child-friendly\n` +
     `- background: simple blue-sky cloud scene, minimal details, never distract from the character\n` +
-    `- do not turn into realistic animal fur; keep it stylized, toy-like, cloud-like`
+    `- strict negative: do not turn into a normal plush/furry bear, no realistic fur strands, no heavy muscle/body structure; keep it stylized, toy-like, cloud-like`
   );
 }
 
