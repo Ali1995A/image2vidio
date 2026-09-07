@@ -88,13 +88,6 @@ function getPointerPos(e: PointerEvent, el: HTMLCanvasElement): Point {
   return { x, y };
 }
 
-function canvasSizeForStage(stage: HTMLElement, dpr: number) {
-  const rect = stage.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(rect.width * dpr));
-  const height = Math.max(1, Math.floor(rect.height * dpr));
-  return { width, height };
-}
-
 async function blobFromCanvas(drawCanvas: HTMLCanvasElement, bgColor: string): Promise<Blob> {
   const out = document.createElement("canvas");
   out.width = drawCanvas.width;
@@ -171,6 +164,23 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
   );
   const lastPointRef = useRef<Point | null>(null);
   const drawingRef = useRef(false);
+  const pointerRef = useRef<number | null>(null);
+  const undoRef = useRef<ImageData[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const saveUndo = () => {
+    const c = canvasRef.current;
+    const ctx = c?.getContext("2d");
+    if (!c || !ctx) return;
+    undoRef.current.push(ctx.getImageData(0, 0, c.width, c.height));
+    if (undoRef.current.length > 8) undoRef.current.shift();
+    setUndoCount(undoRef.current.length);
+  };
+  const undo = () => {
+    const previous = undoRef.current.pop();
+    if (previous) canvasRef.current?.getContext("2d")?.putImageData(previous, 0, 0);
+    setUndoCount(undoRef.current.length);
+  };
 
   const widthLabel = useMemo(() => `${brushWidth}px`, [brushWidth]);
 
@@ -269,57 +279,16 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
     },
   }));
 
+  // A fixed logical surface preserves the composition across rotation and fullscreen.
   useEffect(() => {
-    const stage = stageRef.current;
-    const canvas = canvasRef.current;
-    if (!stage || !canvas) return;
-
-    const ensureCtx = () => {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.imageSmoothingEnabled = true;
-      return ctx;
-    };
-
-    const resize = () => {
-      // IMPORTANT: avoid progressive blur by NEVER resampling the existing bitmap.
-      // Only grow the internal canvas when necessary (e.g. first render / fullscreen / rotation).
-      const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
-      const { width: needW, height: needH } = canvasSizeForStage(stage, dpr);
-
-      // Init
-      if (!canvas.width || !canvas.height) {
-        canvas.width = needW;
-        canvas.height = needH;
-        ensureCtx();
-        return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMaximized(false);
+        setIsColorWallOpen(false);
       }
-
-      // Only expand; never shrink (shrinking would force resampling and blur).
-      const nextW = Math.max(canvas.width, needW);
-      const nextH = Math.max(canvas.height, needH);
-      if (nextW === canvas.width && nextH === canvas.height) return;
-
-      const prev = document.createElement("canvas");
-      prev.width = canvas.width;
-      prev.height = canvas.height;
-      const pctx = prev.getContext("2d");
-      if (pctx) pctx.drawImage(canvas, 0, 0);
-
-      canvas.width = nextW;
-      canvas.height = nextH;
-      const ctx = ensureCtx();
-      if (!ctx) return;
-      // Copy pixels 1:1 to keep strokes crisp (no scaling).
-      ctx.drawImage(prev, 0, 0);
     };
-
-    resize();
-    const ro = new ResizeObserver(() => resize());
-    ro.observe(stage);
-    return () => ro.disconnect();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
@@ -352,7 +321,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       ctx.save();
       ctx.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
       ctx.strokeStyle = isEraser ? "rgba(0,0,0,1)" : brushColor;
-      ctx.lineWidth = brushWidth;
+      ctx.lineWidth = brushWidth * canvas.width / canvas.getBoundingClientRect().width;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -365,13 +334,15 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       ctx.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
       ctx.fillStyle = isEraser ? "rgba(0,0,0,1)" : brushColor;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, brushWidth / 2, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, brushWidth * canvas.width / canvas.getBoundingClientRect().width / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     };
 
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || drawingRef.current) return;
+      saveUndo();
+      pointerRef.current = e.pointerId;
       drawingRef.current = true;
       canvas.setPointerCapture(e.pointerId);
       lastPointRef.current = getPointerPos(e, canvas);
@@ -379,7 +350,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
     };
 
     const onMove = (e: PointerEvent) => {
-      if (!drawingRef.current) return;
+      if (!drawingRef.current || pointerRef.current !== e.pointerId) return;
       const p = getPointerPos(e, canvas);
       const last = lastPointRef.current;
       if (!last) {
@@ -390,19 +361,21 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       lastPointRef.current = p;
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
+      if (pointerRef.current !== e.pointerId) return;
+      pointerRef.current = null;
       drawingRef.current = false;
       lastPointRef.current = null;
     };
 
-    stage.addEventListener("pointerdown", onDown);
-    stage.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
 
     return () => {
-      stage.removeEventListener("pointerdown", onDown);
-      stage.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
@@ -419,6 +392,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
     if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
+    saveUndo();
     ctx.clearRect(0, 0, c.width, c.height);
   };
 
@@ -441,6 +415,12 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
   const onPickFile: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImageError(null);
+    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+      setImageError("请选择 10 MB 以内的图片。");
+      e.target.value = "";
+      return;
+    }
     const url = URL.createObjectURL(file);
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -454,6 +434,8 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       const ctx = c.getContext("2d");
       if (!ctx) return;
 
+      if (img.width * img.height > 40_000_000) throw new Error("图片像素过大，请缩小后再试。");
+      saveUndo();
       const scale = Math.min(c.width / img.width, c.height / img.height);
       const w = Math.floor(img.width * scale);
       const h = Math.floor(img.height * scale);
@@ -463,6 +445,8 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
       ctx.globalCompositeOperation = "source-over";
       ctx.drawImage(img, x, y, w, h);
       ctx.restore();
+    } catch {
+      setImageError("图片无法读取，请选择较小的 PNG、JPEG 或 WebP 图片。");
     } finally {
       URL.revokeObjectURL(url);
       e.target.value = "";
@@ -485,6 +469,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
           <button
             type="button"
             className={`btn ${!isEraser ? "btnOn" : ""}`}
+            aria-pressed={!isEraser}
             onClick={() => setIsEraser(false)}
           >
             <span className="pinyin-text">{py("huà bǐ")}</span> 画笔
@@ -492,10 +477,12 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
           <button
             type="button"
             className={`btn ${isEraser ? "btnOn" : ""}`}
+            aria-pressed={isEraser}
             onClick={() => setIsEraser(true)}
           >
             <span className="pinyin-text">{py("xiàng pí")}</span> 橡皮
           </button>
+          <button type="button" className="btn btnGhost" onClick={undo} disabled={!undoCount}>撤销</button>
           <button type="button" className="btn btnGhost" onClick={clear}>
             <span className="pinyin-text">{py("qīng chú")}</span> 清除
           </button>
@@ -514,6 +501,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
           </div>
           <input
             className="slider"
+            aria-label="画笔宽度"
             type="range"
             min={4}
             max={48}
@@ -739,6 +727,7 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
         </div>
       ) : null}
 
+      {imageError ? <div role="alert" className="hint">{imageError}</div> : null}
       <div className="canvasWrap">
         <div
           ref={stageRef}
@@ -747,7 +736,8 @@ const DoodlePad = forwardRef<DoodlePadHandle, Props>(function DoodlePad(
             background: bgColor,
           }}
         >
-          <canvas ref={canvasRef} className="canvasEl" />
+          <canvas ref={canvasRef} width={1200} height={900} className="canvasEl" aria-label="涂鸦画布" />
+          {isFullscreen || isMaximized ? <button type="button" className="btn fullscreenExit" onPointerDown={(e) => e.stopPropagation()} onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); setIsMaximized(false); }}>退出全屏</button> : null}
         </div>
         <div className="hint">
           <span className="pinyin-text">{py("wán fǎ")}</span> 玩法：{" "}

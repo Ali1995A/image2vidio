@@ -19,10 +19,10 @@ export default function HomePage() {
               <span className="pinyin-text">{py("tú yā")}</span> 涂鸦
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <a className="chip" href="/version" style={{ textDecoration: "none", color: "inherit" }}>
+              <a aria-label="查看版本信息" className="chip versionLink" href="/version" style={{ textDecoration: "none", color: "inherit" }}>
                 build {APP_VERSION}
               </a>
-              <div className="chip">iPad Pro（Landscape）</div>
+              <div className="chip">画出你的奇思妙想</div>
             </div>
           </div>
           <DoodlePad
@@ -40,10 +40,10 @@ export default function HomePage() {
               动漫视频
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <a className="chip" href="/version" style={{ textDecoration: "none", color: "inherit" }}>
+              <a aria-label="查看版本信息" className="chip versionLink" href="/version" style={{ textDecoration: "none", color: "inherit" }}>
                 build {APP_VERSION}
               </a>
-              <div className="chip">smart → wan2.2 t2v · 5s</div>
+              <div className="chip">5 秒动画小剧场</div>
             </div>
           </div>
           <VideoGenerator doodleRef={doodleRef} />

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "project_name": "image2vidio",
+  "project_mode": "software_app",
+  "mode_reason": "Existing Next.js drawing and video application",
+  "created_at": "2026-09-07",
+  "created_by": "Codex",
+  "template_source": "Existing docs structure",
+  "can_switch_mode": true,
+  "compatible_modes": [
+    "data_automation"
+  ],
+  "notes": "Reuse installed dependencies and docs/HANDOFF_REPORT.md; no parent workspace relationship."
+}

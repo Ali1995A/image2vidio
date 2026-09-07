@@ -506,3 +506,37 @@ body {
     max-height: 92vh;
   }
 }
+
+/* Usable drawing space on tablets, phones, and short browser windows. */
+.appShell { min-height: 100dvh; height: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.panel, .panelInner { min-width: 0; }
+.panelHeader { flex-wrap: wrap; }
+.panelHeader > div:last-child { flex-wrap: wrap; }
+.versionLink { font-size: 10px; opacity: .65; }
+.canvasStage { flex: none; width: 100%; aspect-ratio: 4 / 3; }
+.canvasEl { position: absolute; inset: 0; }
+.canvasStageMax, .canvasStage:fullscreen { width: min(100vw, calc(100dvh * 4 / 3)); height: auto; aspect-ratio: 4 / 3; margin: auto; }
+.fullscreenExit { position: absolute; top: 12px; right: 12px; z-index: 1; }
+.videoStage { min-height: 260px; }
+.videoEl { position: absolute; inset: 0; }
+.btn:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+button:not(:disabled) { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #a71960; outline-offset: 4px; }
+.hint { line-height: 1.7; overflow-wrap: anywhere; }
+.emptyState { text-align: center; padding: 32px 22px; color: #7b4963; }
+.emptyState > span { display: block; font-size: 52px; color: #d93681; margin-bottom: 16px; }
+.emptyState strong { display: block; font-size: 22px; }
+.emptyState p { margin: 12px 0; line-height: 1.8; }
+.emptyState small { opacity: .8; }
+@media (max-width: 900px) {
+  .appShell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .panel { height: auto; }
+  .videoStage { min-height: 300px; }
+}
+@media (max-width: 480px) {
+  .row { grid-template-columns: 1fr; }
+  .btnRow { gap: 8px; }
+  .btn { padding: 10px 12px; min-height: 44px; }
+  .colorWall { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .colorWall12 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}

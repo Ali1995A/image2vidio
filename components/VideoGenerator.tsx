@@ -81,10 +81,6 @@ function buildPrompt(styleId: StyleId) {
   return `${globalStrict}${style.prompt}${common}`;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
 async function sniffBlobVideoType(blob: Blob): Promise<string | null> {
   const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
   if (head.length >= 12) {
@@ -153,15 +149,24 @@ export default function VideoGenerator({ doodleRef }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const runIdRef = useRef(0);
 
-  const urlRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [canShare, setCanShare] = useState(false);
 
-  const videoUrl = useMemo(() => {
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    if (!videoBlob) return null;
-    const u = URL.createObjectURL(videoBlob);
-    urlRef.current = u;
-    return u;
+  useEffect(() => {
+    setCanShare(typeof navigator.share === "function");
+    return () => {
+      runIdRef.current++;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!videoBlob) { setVideoUrl(null); return; }
+    const url = URL.createObjectURL(videoBlob);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
   }, [videoBlob]);
 
   useEffect(() => {
@@ -176,19 +181,26 @@ export default function VideoGenerator({ doodleRef }: Props) {
     }
   }, [videoRemoteUrl, videoUrl]);
 
-  const canShare = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return typeof (navigator as any).share === "function";
-  }, []);
-
   const onGenerate = async () => {
+    if (abortRef.current) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     const runId = ++runIdRef.current;
+    const deadline = window.setTimeout(() => controller.abort(), 8 * 60 * 1000);
+    const request = async (url: string, options: RequestInit) => {
+      controller.signal.throwIfAborted();
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      controller.signal.throwIfAborted();
+      return response;
+    };
     setError(null);
     setStatus("");
     setVideoBlob(null);
     setVideoRemoteUrl(null);
     if (!doodleRef.current) {
       setError(`${py("huà bù wú fǎ dú qǔ")}（画布无法读取）`);
+      window.clearTimeout(deadline);
+      abortRef.current = null;
       return;
     }
     setIsBusy(true);
@@ -204,7 +216,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
         })) ?? (await doodleRef.current.exportPngBlob());
       const pngDataUrl = await blobToDataUrl(imgBlob);
 
-      const res = await fetch("/api/generate", {
+      const res = await request("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -217,10 +229,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
       const tryHandlePending = async (pendingTid: string) => {
         const maxTotalMs = 8 * 60 * 1000; // 8 minutes
-        const cycleMs = 2_160_000;
         const totalStarted = Date.now();
-        let cycleStarted = totalStarted;
-        let cycle = 1;
         let pollCount = 0;
 
         while (true) {
@@ -232,23 +241,18 @@ export default function VideoGenerator({ doodleRef }: Props) {
             return;
           }
           const totalElapsed = Math.round((Date.now() - totalStarted) / 1000);
-          const cycleElapsed = Math.round((Date.now() - cycleStarted) / 1000);
           setStatus(
-            `${py("shēng chéng zhōng")}…（生成中… ${totalElapsed}s · cycle ${cycle} ${cycleElapsed}s · tid ${pendingTid}）`,
+            `${py("shēng chéng zhōng")}…（生成中… ${totalElapsed} 秒，请稍候）`,
           );
           await new Promise((r) => setTimeout(r, 1800));
 
           pollCount++;
 
-          if (Date.now() - cycleStarted > cycleMs) {
-            cycle++;
-            cycleStarted = Date.now();
-          }
 
           // Occasionally check status to confirm terminal failure/success instead of guessing from content.
           if (pollCount % 5 === 0) {
             try {
-              const st = await fetch("/api/generate", {
+              const st = await request("/api/generate", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
@@ -261,6 +265,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
                 const ct = (st.headers.get("content-type") || "").toLowerCase();
                 if (ct.includes("application/json")) {
                   const j = await st.json().catch(() => null);
+                  if (runIdRef.current !== runId) return;
                   const statusVal = pickStatusValue(j);
                   if (statusVal && isTerminalFailure(statusVal)) {
                     const msg = pickMessageValue(j) || `${py("shī bài")}（失败）`;
@@ -282,7 +287,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
             }
           }
 
-          const poll = await fetch("/api/generate", {
+          const poll = await request("/api/generate", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -352,6 +357,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
             return;
           }
           if (typeof j?.url === "string" && j.url) {
+            if (runIdRef.current !== runId) return;
             setVideoRemoteUrl(j.url);
             setStatus(`${py("wán chéng")}!（完成!）`);
             return;
@@ -373,6 +379,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
             return;
           }
           if (typeof j?.url === "string" && j.url) {
+            if (runIdRef.current !== runId) return;
             setVideoRemoteUrl(j.url);
             setStatus(`${py("wán chéng")}!（完成!）`);
             return;
@@ -421,25 +428,35 @@ export default function VideoGenerator({ doodleRef }: Props) {
 
       const video =
         blob.type && blob.type.startsWith("video/") ? blob : new Blob([blob], { type: effectiveType });
+      if (runIdRef.current !== runId) return;
       setVideoBlob(video);
       setStatus(`${py("wán chéng")}!（完成!）`);
     } catch (e) {
+      if (runIdRef.current !== runId) return;
       const msg = e instanceof Error ? e.message : String(e);
-      if (/tls handshake timeout/i.test(msg)) {
+      if (controller.signal.aborted) {
+        setError("等待超时，请稍后再试。上游任务可能仍在处理。");
+      } else if (/tls handshake timeout/i.test(msg)) {
         setError(`${py("wǎng luò mán")}（网络慢）：qǐng zài shì yí cì（请再试一次）`);
       } else {
         setError(msg);
       }
       setStatus("");
     } finally {
-      setIsBusy(false);
+      window.clearTimeout(deadline);
+      if (runIdRef.current === runId) {
+        abortRef.current = null;
+        setIsBusy(false);
+      }
     }
   };
 
   const onStop = () => {
     runIdRef.current++;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setIsBusy(false);
-    setStatus("");
+    setStatus("已停止等待，上游已提交的任务可能继续运行。");
   };
 
   const togglePlay = async () => {
@@ -452,7 +469,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
         v.pause();
       }
     } catch {
-      // ignore
+      setError("视频暂时无法播放，请尝试下载后打开。");
     }
   };
 
@@ -470,7 +487,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
     if (!videoBlob) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(videoBlob);
-    a.download = `image2vidio_${Date.now()}.mp4`;
+    a.download = `image2vidio_${Date.now()}.${videoBlob.type.includes("webm") ? "webm" : "mp4"}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -478,11 +495,16 @@ export default function VideoGenerator({ doodleRef }: Props) {
   };
 
   const onShare = async () => {
+    if (videoRemoteUrl) {
+      try { await navigator.share({ url: videoRemoteUrl, title: "我的涂鸦动画" }); }
+      catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) setError("分享失败，请使用下载按钮。"); }
+      return;
+    }
     if (!videoBlob) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nav: any = navigator;
     try {
-      const file = new File([videoBlob], "image2vidio.mp4", { type: videoBlob.type });
+      const file = new File([videoBlob], `image2vidio.${videoBlob.type.includes("webm") ? "webm" : "mp4"}`, { type: videoBlob.type });
       await nav.share({ files: [file], title: "image2vidio", text: `${py("dòng màn shì pín")} 动漫视频` });
     } catch {
       // ignore
@@ -503,6 +525,7 @@ export default function VideoGenerator({ doodleRef }: Props) {
                 type="button"
                 className={`btn styleBtn ${styleId === s.id ? "btnOn" : ""}`}
                 onClick={() => setStyleId(s.id)}
+                aria-pressed={styleId === s.id}
                 disabled={isBusy}
               >
                 <span className="pinyin-text">{py(s.pinyin)}</span> {s.zh}
@@ -523,19 +546,19 @@ export default function VideoGenerator({ doodleRef }: Props) {
           <button type="button" className="btn" onClick={onStop} disabled={!isBusy}>
             <span className="pinyin-text">{py("tíng zhǐ")}</span> 停止
           </button>
-          <button type="button" className="btn" onClick={onDownload} disabled={!videoBlob}>
+          <button type="button" className="btn" onClick={onDownload} disabled={!videoBlob && !videoRemoteUrl}>
             <span className="pinyin-text">{py("xià zǎi")}</span> 下载
           </button>
           {canShare ? (
-            <button type="button" className="btn" onClick={onShare} disabled={!videoBlob}>
+            <button type="button" className="btn" onClick={onShare} disabled={!videoBlob && !videoRemoteUrl}>
               <span className="pinyin-text">{py("fēn xiǎng")}</span> 分享
             </button>
           ) : null}
         </div>
 
-        {status ? <div className="hint">{status}</div> : null}
+        {status ? <div className="hint" role="status" aria-live="polite">{status}</div> : null}
         {error ? (
-          <div className="hint" style={{ color: "#b4235a", fontWeight: 800 }}>
+          <div role="alert" className="hint" style={{ color: "#b4235a", fontWeight: 800 }}>
             {error}
           </div>
         ) : null}
@@ -549,6 +572,8 @@ export default function VideoGenerator({ doodleRef }: Props) {
                 ref={videoRef}
                 className="videoEl"
                 src={videoRemoteUrl}
+                controls
+                onError={() => setError("视频加载失败，链接可能已过期，请尝试下载或重新生成。")}
                 playsInline
                 preload="auto"
                 onPlay={() => setIsPlaying(true)}
@@ -571,6 +596,8 @@ export default function VideoGenerator({ doodleRef }: Props) {
                 ref={videoRef}
                 className="videoEl"
                 src={videoUrl}
+                controls
+                onError={() => setError("视频加载失败，链接可能已过期，请尝试下载或重新生成。")}
                 playsInline
                 preload="auto"
                 onPlay={() => setIsPlaying(true)}
@@ -588,14 +615,11 @@ export default function VideoGenerator({ doodleRef }: Props) {
               ) : null}
             </>
           ) : (
-            <div className="hint" style={{ opacity: 0.35 }} />
+            <div className="emptyState"><span aria-hidden="true">✦</span><strong>{isBusy ? "正在为画作添加一点魔法" : "让想象动起来"}</strong><p>{isBusy ? "视频准备好后会出现在这里，请稍候。" : "先画一幅画，选好风格，再点击开始。"}</p><small>生成 5 秒短片 · AI 创作效果可能与原画不同</small></div>
           )}
         </div>
         <div className="hint">
-          <span className="pinyin-text">
-            {py("iOS xià zǎi shí")}：{py("diǎn")} “{py("xià zǎi")} 下载” {py("hòu")}，{py("kě")} {py("zài")} “{py("wén jiàn")} 文件” {py("lǐ")} {py("zhǎo")}
-          </span>
-          （iOS 下载时：点“下载”后，可在“文件”里找）
+          下载直链视频会打开新页面，可使用浏览器菜单保存；iPhone / iPad 可选择“存储到文件”。
         </div>
       </div>
     </>
