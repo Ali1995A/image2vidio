@@ -1,3 +1,6 @@
+import { withWebGuard, GuardError } from "../../../server/ai-guard.cjs";
+import { policy } from "../../../server/policy.cjs";
+import { providerConfig, providerFetch, downloadFetch, isSignedMedia, mediaUrl } from "../../../server/provider-boundary.cjs";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -211,7 +214,7 @@ async function captionDoodle(params: {
     ],
   };
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await providerFetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -271,7 +274,7 @@ async function fetchVideoContent(params: {
   tid: string;
 }): Promise<Response> {
   const { baseUrl, apiKey, tid } = params;
-  return await fetch(`${baseUrl}/videos/${encodeURIComponent(tid)}/content`, {
+  return await providerFetch(`${baseUrl}/videos/${encodeURIComponent(tid)}/content`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 }
@@ -282,7 +285,7 @@ async function fetchVideoStatus(params: {
   tid: string;
 }): Promise<Response> {
   const { baseUrl, apiKey, tid } = params;
-  return await fetch(`${baseUrl}/videos/${encodeURIComponent(tid)}`, {
+  return await providerFetch(`${baseUrl}/videos/${encodeURIComponent(tid)}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 }
@@ -305,23 +308,12 @@ function pickUrlDeep(json: unknown): string | null {
   return null;
 }
 
-function isRemoteSignedUrl(url: string) {
-  const u = String(url || "").trim();
-  if (!u) return false;
-  // Prefer letting the browser fetch signed OSS URLs; server-side fetch can hit TLS handshake timeouts.
-  return /^https:\/\/.+aliyuncs\.com\//i.test(u) || /^https:\/\/.+oss-/i.test(u);
-}
+function isRemoteSignedUrl(url: string) { return isSignedMedia(url); }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const body = await req.json();
-    const envApiKey = String(process.env.AIHUBMIX_API_KEY || "").trim();
-    const envBaseUrl = String(process.env.AIHUBMIX_BASE_URL || "").trim();
-    const apiKey = String(body?.apiKey || envApiKey || "").trim();
-    const baseUrl = String(body?.baseUrl || envBaseUrl || "https://aihubmix.com/v1")
-      .trim()
-      .replace(/\/$/, "");
-    const seconds = Number(body?.seconds ?? 1);
+    const { apiKey, baseUrl } = providerConfig(body);
     const prompt = String(body?.prompt || "").trim();
     const imageDataUrl = String(body?.imageDataUrl || "").trim();
     const mode = String(body?.mode || "").trim().toLowerCase();
@@ -330,7 +322,7 @@ export async function POST(req: Request) {
 
     if (!apiKey)
       return new NextResponse(
-        "Missing apiKey. Set AIHUBMIX_API_KEY in Vercel env (or pass apiKey from client).",
+        "Missing AIHUBMIX_API_KEY server configuration.",
         { status: 400 },
       );
 
@@ -414,7 +406,7 @@ export async function POST(req: Request) {
                   { status: 200, headers: { "cache-control": "no-store" } },
                 );
               }
-              const videoRes = await fetch(u, { headers: { Authorization: `Bearer ${apiKey}` } });
+              const videoRes = await downloadFetch(u, apiKey);
               if (videoRes.ok) {
                 const vct = videoRes.headers.get("content-type") || "";
                 const ab = await videoRes.arrayBuffer();
@@ -446,6 +438,7 @@ export async function POST(req: Request) {
         if (pending) return NextResponse.json(pending, { status: 202 });
 
         const u = pickUrlDeep(maybeJson);
+        if (u) mediaUrl(u);
         if (u) {
           return NextResponse.json(
             { url: u, tid, status: "completed" },
@@ -530,7 +523,7 @@ export async function POST(req: Request) {
     let genRes: Response;
 
     if (!useMultipart) {
-      genRes = await fetch(`${baseUrl}/videos`, {
+      genRes = await providerFetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -547,7 +540,7 @@ export async function POST(req: Request) {
       form.set("prompt", finalPrompt);
       form.set("input_reference", pngBlob, "doodle.jpg");
 
-      genRes = await fetch(`${baseUrl}/videos`, {
+      genRes = await providerFetch(`${baseUrl}/videos`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,
@@ -573,7 +566,7 @@ export async function POST(req: Request) {
         form.set("prompt", finalPrompt);
         form.set("input_reference", pngBlob, "doodle.png");
 
-        genRes = await fetch(`${baseUrl}/videos`, {
+        genRes = await providerFetch(`${baseUrl}/videos`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -641,7 +634,7 @@ export async function POST(req: Request) {
           { status: 200, headers: { "cache-control": "no-store" } },
         );
       }
-      const videoRes = await fetch(directUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+      const videoRes = await downloadFetch(directUrl, apiKey);
       if (!videoRes.ok) {
         const t = await videoRes.text();
         return new NextResponse(t || `Video fetch failed (${videoRes.status})`, { status: 502 });
@@ -693,9 +686,14 @@ export async function POST(req: Request) {
       },
     });
   } catch (e) {
+    if (e instanceof GuardError) throw e;
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
       { status: 500 },
     );
   }
+}
+
+export async function POST(req: Request) {
+  return withWebGuard(req, policy, handlePOST);
 }
